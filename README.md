@@ -42,6 +42,23 @@ The dashboard shows a live satellite map of all flight tracks, ingestion status 
 
 ---
 
+## Getting a DJI API Key
+
+DJI RC Pro logs (firmware v13+) are encrypted. The workflow uses your DJI developer **App Key** (also called SDK Key) to fetch the decryption keychain from DJI's servers the first time each log is processed.
+
+1. Go to [developer.dji.com](https://developer.dji.com/) and sign in (or create a free account using your DJI username)
+2. Click **Apps** in the top navigation → **Create App**
+3. Fill in any app name and description — the values do not matter for log decryption
+4. Select **Mobile SDK** as the SDK type
+5. Once created, open your app and go to the **App Detail** page
+6. Copy the **SDK Key** — this is your DJI API Key
+
+Paste this key into the **DJI API Key** field when configuring the workflow. The key is only sent to DJI's servers on the first decrypt of each log file; subsequent runs use a locally cached keychain and do not require internet access to DJI.
+
+> **Note:** The key is tied to your DJI developer account. Each organisation running this workflow should register their own free account and use their own key.
+
+---
+
 ## Configuration
 
 | Field | Description |
