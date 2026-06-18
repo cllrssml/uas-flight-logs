@@ -392,6 +392,7 @@ def ingest_flights(
                      "--api-key", dji_api_key,
                      "--kml", str(kml_tmp)],
                     capture_output=True, text=True, check=True,
+                    timeout=120,
                 )
                 flight_data = json.loads(result.stdout)
                 kml_text = kml_tmp.read_text(encoding="utf-8") if kml_tmp.exists() else ""
@@ -562,23 +563,29 @@ def ingest_flights(
             source_id = _source_cache[aircraft_serial]
 
             # ------------------------------------------------------------------
-            # Step 9: idempotency check — query ER event ledger for this flight key
+            # Step 9: idempotency check — query ER event ledger by event time.
+            # We use a ±10s window around takeoff_dt rather than matching a
+            # flight_key in event_details, because ER does not reliably return
+            # event_details fields in list queries even with include_details=True.
+            # Real flights are never within 10 s of each other.
             # ------------------------------------------------------------------
             flight_key = f"{aircraft_serial}_{takeoff_dt.strftime('%Y%m%dT%H%M%SZ')}"
             candidates = client.get_events(
                 event_type=[event_type_uuid],
-                since=(takeoff_dt - timedelta(hours=2)).isoformat(),
-                until=(takeoff_dt + timedelta(hours=2)).isoformat(),
-                include_details=True,
+                since=(takeoff_dt - timedelta(seconds=10)).isoformat(),
+                until=(takeoff_dt + timedelta(seconds=10)).isoformat(),
             )
 
             is_duplicate = False
             if not candidates.empty:
                 for _, ev in candidates.iterrows():
-                    ev_details = ev.get("event_details") or {}
-                    if isinstance(ev_details, dict) and ev_details.get("flight_key") == flight_key:
-                        is_duplicate = True
-                        break
+                    try:
+                        ev_time = _parse_dt(str(ev.get("time") or ""))
+                        if abs((ev_time - takeoff_dt).total_seconds()) <= 10:
+                            is_duplicate = True
+                            break
+                    except Exception:
+                        continue
 
             if is_duplicate:
                 # Already in ER — persist KML but skip all ER writes
