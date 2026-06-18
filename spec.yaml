@@ -159,9 +159,12 @@ workflow:
         - flight_time_min
         - battery_pct_takeoff
         - battery_pct_landing
+        - battery_serial
         - max_alt_agl_m
         - max_speed_ms
         - max_dist_m
+        - total_distance_m
+        - firmware
         - status
         - error
 
@@ -214,6 +217,24 @@ workflow:
     partial:
       ingest_result: ${{ workflow.ingest_result.return }}
 
+  - name: Stat - Total Distance
+    id: stat_distance
+    task: format_total_distance
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      ingest_result: ${{ workflow.ingest_result.return }}
+
+  - name: Stat - Aircraft
+    id: stat_aircraft
+    task: count_aircraft
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      ingest_result: ${{ workflow.ingest_result.return }}
+
   # --- Score-card widgets (row 1 of dashboard) --------------------------------
   - name: Widget - Ingested
     id: widget_ingested
@@ -258,7 +279,28 @@ workflow:
       title: Time Flown
       data: ${{ workflow.stat_flight_time.return }}
 
-  # --- Map widget (row 2 of dashboard) ----------------------------------------
+  - name: Widget - Total Distance
+    id: widget_distance
+    task: create_text_widget_single_view
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      title: Distance
+      data: ${{ workflow.stat_distance.return }}
+
+  - name: Widget - Aircraft
+    id: widget_aircraft
+    task: create_single_value_widget_single_view
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      title: Aircraft
+      data: ${{ workflow.stat_aircraft.return }}
+      decimal_places: 0
+
+  # --- Map widget (row 3 of dashboard) ----------------------------------------
   - name: Map Widget
     id: map_widget
     task: create_map_widget_single_view
@@ -292,5 +334,7 @@ workflow:
         - ${{ workflow.widget_skipped.return }}
         - ${{ workflow.widget_failed.return }}
         - ${{ workflow.widget_flight_time.return }}
+        - ${{ workflow.widget_distance.return }}
+        - ${{ workflow.widget_aircraft.return }}
         - ${{ workflow.map_widget.return }}
         - ${{ workflow.table_widget.return }}

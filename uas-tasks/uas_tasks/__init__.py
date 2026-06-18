@@ -64,6 +64,8 @@ _RESULTS_COLUMNS = [
     "max_alt_agl_m",
     "max_speed_ms",
     "max_dist_m",
+    "total_distance_m",
+    "firmware",
     "status",
     "error",
 ]
@@ -84,6 +86,8 @@ class IngestResult:
     n_skipped: int = 0
     n_failed: int = 0
     total_flight_seconds: float = 0.0
+    total_distance_m: float = 0.0
+    n_aircraft: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -359,6 +363,7 @@ def ingest_flights(
     kml_paths: list[str] = []
     n_ingested = n_skipped = n_failed = 0
     total_flight_seconds = 0.0
+    total_distance_m = 0.0
 
     # Ensure the DJI source provider exists — idempotent (ER returns error if duplicate, we ignore it).
     _DJI_PROVIDER_KEY = "dji_rc_pro"
@@ -426,6 +431,21 @@ def ingest_flights(
             takeoff_dt = _parse_dt(frames[takeoff_idx]["custom"]["dateTime"])
             landing_dt = _parse_dt(frames[landing_idx]["custom"]["dateTime"])
 
+            # Guard: epoch/pre-GPS-lock timestamps on the takeoff frame itself.
+            # DJI drones didn't exist before 2015; any earlier year is garbage.
+            _MIN_YEAR = 2015
+            if takeoff_dt.year < _MIN_YEAR:
+                for f in frames[takeoff_idx:]:
+                    try:
+                        dt = _parse_dt(f["custom"]["dateTime"])
+                        if dt.year >= _MIN_YEAR and not f["osd"]["isOnGround"]:
+                            takeoff_dt = dt
+                            break
+                    except Exception:
+                        continue
+            if landing_dt.year < _MIN_YEAR:
+                landing_dt = takeoff_dt
+
             # Flight window used to reject frames with garbage timestamps (near-zero
             # GPS coordinates that passed the != 0.0 filter but are pre-GPS-lock noise).
             _win_margin = timedelta(minutes=5)
@@ -435,13 +455,20 @@ def ingest_flights(
             battery_pct_takeoff = int(frames[takeoff_idx]["battery"]["chargeLevel"])
             battery_pct_landing = int(frames[landing_idx]["battery"]["chargeLevel"])
 
-            # Home point — first frame with a valid non-zero home location
-            home_lat = home_lon = 0.0
-            for f in frames:
-                if f["home"]["latitude"] != 0.0 and f["home"]["longitude"] != 0.0:
-                    home_lat = f["home"]["latitude"]
-                    home_lon = f["home"]["longitude"]
-                    break
+            # Reference point for max_dist_m and event location.
+            # Use the drone's OSD position at the takeoff frame (actual GPS, always in
+            # valid decimal degrees). Fall back to home.* only if OSD is zero, and
+            # validate that home.* is within WGS-84 range (some firmware versions store
+            # home coordinates in a non-standard unit that looks like ~45836623).
+            ref_lat = frames[takeoff_idx]["osd"]["latitude"]
+            ref_lon = frames[takeoff_idx]["osd"]["longitude"]
+            if ref_lat == 0.0 or ref_lon == 0.0:
+                for f in frames:
+                    hlat = f["home"]["latitude"]
+                    hlon = f["home"]["longitude"]
+                    if hlat != 0.0 and hlon != 0.0 and abs(hlat) <= 90.0 and abs(hlon) <= 180.0:
+                        ref_lat, ref_lon = hlat, hlon
+                        break
 
             # ------------------------------------------------------------------
             # Step 4: performance envelope (parser computes most values for us)
@@ -450,10 +477,9 @@ def ingest_flights(
             max_alt_agl_m = float(log_details["maxHeight"])
             max_speed_ms = float(log_details["maxHorizontalSpeed"])
 
-            # max_dist_m: max great-circle distance from home — not in log_details,
-            # computed here from per-frame positions. Flight window filter rejects
-            # frames with near-zero GPS (pre-lock noise) that pass the != 0.0 check.
-            if home_lat != 0.0 and home_lon != 0.0:
+            # max_dist_m: max great-circle distance from the takeoff reference point.
+            # Flight window filter rejects pre-GPS-lock frames with garbage timestamps.
+            if ref_lat != 0.0 and ref_lon != 0.0:
                 valid_pts = [
                     (f["osd"]["latitude"], f["osd"]["longitude"])
                     for f in frames
@@ -461,7 +487,7 @@ def ingest_flights(
                     and _in_flight_window(f["custom"]["dateTime"], _win_start, _win_end)
                 ]
                 max_dist_m = max(
-                    (_haversine_m(home_lat, home_lon, lat, lon) for lat, lon in valid_pts),
+                    (_haversine_m(ref_lat, ref_lon, lat, lon) for lat, lon in valid_pts),
                     default=0.0,
                 )
             else:
@@ -568,6 +594,8 @@ def ingest_flights(
                     "max_alt_agl_m":       round(max_alt_agl_m, 1),
                     "max_speed_ms":        round(max_speed_ms, 1),
                     "max_dist_m":          round(max_dist_m, 1),
+                    "total_distance_m":    round(float(log_details.get("totalDistance", 0.0)) * 1000, 1),
+                    "firmware":            firmware,
                     "status":              "skipped",
                 })
                 n_skipped += 1
@@ -603,9 +631,10 @@ def ingest_flights(
                 # Step 11: post UAS Flight Folio event
                 # ------------------------------------------------------------------
                 event_location = (
-                    {"latitude": home_lat, "longitude": home_lon}
-                    if home_lat != 0.0 else None
+                    {"latitude": ref_lat, "longitude": ref_lon}
+                    if ref_lat != 0.0 else None
                 )
+                total_dist_m = round(float(log_details.get("totalDistance", 0.0)) * 1000, 1)
                 client.post_event({
                     "event_type": event_type_name,
                     "time": takeoff_dt.isoformat(),
@@ -624,9 +653,9 @@ def ingest_flights(
                         "max_alt_agl_m":         round(max_alt_agl_m, 1),
                         "max_speed_ms":          round(max_speed_ms, 1),
                         "max_dist_m":            round(max_dist_m, 1),
-                        "total_distance_m":      round(float(log_details.get("totalDistance", 0.0)) * 1000, 1),
-                        "home_lat":              home_lat,
-                        "home_lon":              home_lon,
+                        "total_distance_m":      total_dist_m,
+                        "home_lat":              ref_lat,
+                        "home_lon":              ref_lon,
                         "firmware":              firmware,
                     },
                 })
@@ -647,10 +676,13 @@ def ingest_flights(
                     "max_alt_agl_m":       round(max_alt_agl_m, 1),
                     "max_speed_ms":        round(max_speed_ms, 1),
                     "max_dist_m":          round(max_dist_m, 1),
+                    "total_distance_m":    total_dist_m,
+                    "firmware":            firmware,
                     "status":              "ingested",
                 })
                 n_ingested += 1
                 total_flight_seconds += flight_time_s
+                total_distance_m += float(log_details.get("totalDistance", 0.0)) * 1000
 
         except Exception as exc:
             row["status"] = "failed"
@@ -671,6 +703,9 @@ def ingest_flights(
         else pd.DataFrame(columns=_RESULTS_COLUMNS)
     )
 
+    ingested_mask = results_df["status"] == "ingested" if not results_df.empty else pd.Series([], dtype=bool)
+    n_aircraft = int(results_df.loc[ingested_mask, "aircraft_serial"].nunique()) if not results_df.empty else 0
+
     return IngestResult(
         track_gdf=track_gdf,
         results_df=results_df,
@@ -679,6 +714,8 @@ def ingest_flights(
         n_skipped=n_skipped,
         n_failed=n_failed,
         total_flight_seconds=total_flight_seconds,
+        total_distance_m=total_distance_m,
+        n_aircraft=n_aircraft,
     )
 
 
@@ -737,3 +774,16 @@ def format_total_flight_time(ingest_result: Any) -> str:
     h = int(total_s // 3600)
     m = int((total_s % 3600) // 60)
     return f"{h}:{m:02d}"
+
+
+@register()
+def format_total_distance(ingest_result: Any) -> str:
+    """Total GPS distance flown across all ingested flights, formatted as X.X km."""
+    km = ingest_result.total_distance_m / 1000.0
+    return f"{km:.1f} km" if km > 0 else "0.0 km"
+
+
+@register()
+def count_aircraft(ingest_result: Any) -> int:
+    """Number of unique aircraft serial numbers in this ingestion batch."""
+    return ingest_result.n_aircraft

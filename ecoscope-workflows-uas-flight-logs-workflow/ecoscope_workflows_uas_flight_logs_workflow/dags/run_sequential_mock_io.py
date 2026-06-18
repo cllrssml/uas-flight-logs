@@ -37,11 +37,13 @@ from ecoscope.platform.tasks.skip import (
 )
 from ecoscope.platform.tasks.skip import any_is_empty_df as any_is_empty_df
 from ecoscope.platform.tasks.skip import never as never
+from uas_tasks import count_aircraft as count_aircraft
 from uas_tasks import count_failed as count_failed
 from uas_tasks import count_ingested as count_ingested
 from uas_tasks import count_skipped as count_skipped
 from uas_tasks import extract_results_df as extract_results_df
 from uas_tasks import extract_track_gdf as extract_track_gdf
+from uas_tasks import format_total_distance as format_total_distance
 from uas_tasks import format_total_flight_time as format_total_flight_time
 from uas_tasks import ingest_flights as ingest_flights
 from uas_tasks import set_aircraft_identity as set_aircraft_identity
@@ -297,9 +299,12 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
                 "flight_time_min",
                 "battery_pct_takeoff",
                 "battery_pct_landing",
+                "battery_serial",
                 "max_alt_agl_m",
                 "max_speed_ms",
                 "max_dist_m",
+                "total_distance_m",
+                "firmware",
                 "status",
                 "error",
             ],
@@ -393,6 +398,38 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    stat_distance = (
+        task(format_total_distance)
+        .validate()
+        .set_task_instance_id("stat_distance")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(ingest_result=ingest_result, **(params.get("stat_distance") or {}))
+        .call()
+    )
+
+    stat_aircraft = (
+        task(count_aircraft)
+        .validate()
+        .set_task_instance_id("stat_aircraft")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(ingest_result=ingest_result, **(params.get("stat_aircraft") or {}))
+        .call()
+    )
+
     widget_ingested = (
         task(create_single_value_widget_single_view)
         .validate()
@@ -476,6 +513,47 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    widget_distance = (
+        task(create_text_widget_single_view)
+        .validate()
+        .set_task_instance_id("widget_distance")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            title="Distance",
+            data=stat_distance,
+            **(params.get("widget_distance") or {}),
+        )
+        .call()
+    )
+
+    widget_aircraft = (
+        task(create_single_value_widget_single_view)
+        .validate()
+        .set_task_instance_id("widget_aircraft")
+        .handle_errors()
+        .with_tracing()
+        .skipif(
+            conditions=[
+                any_dependency_skipped,
+            ],
+            unpack_depth=1,
+        )
+        .partial(
+            title="Aircraft",
+            data=stat_aircraft,
+            decimal_places=0,
+            **(params.get("widget_aircraft") or {}),
+        )
+        .call()
+    )
+
     map_widget = (
         task(create_map_widget_single_view)
         .validate()
@@ -530,6 +608,8 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
                 widget_skipped,
                 widget_failed,
                 widget_flight_time,
+                widget_distance,
+                widget_aircraft,
                 map_widget,
                 table_widget,
             ],
