@@ -1,0 +1,164 @@
+{
+  "properties": {
+    "workflow_details": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Workflow Name",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Workflow Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "description": "Add information that will help to differentiate this workflow from another.",
+      "title": "Workflow Details"
+    },
+    "er_client_name": {
+      "additionalProperties": false,
+      "properties": {
+        "data_source": {
+          "$ref": "#/$defs/EarthRangerConnection",
+          "title": "",
+          "description": "Select one of your configured data sources."
+        }
+      },
+      "required": [
+        "data_source"
+      ],
+      "type": "object",
+      "title": "Data Source"
+    },
+    "dji_api_key": {
+      "additionalProperties": false,
+      "properties": {
+        "dji_api_key": {
+          "title": "Dji Api Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dji_api_key"
+      ],
+      "type": "object",
+      "title": "DJI API Key"
+    },
+    "input_folder": {
+      "additionalProperties": false,
+      "properties": {
+        "folder_path": {
+          "title": "Folder Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "folder_path"
+      ],
+      "type": "object",
+      "title": "Flight Logs Folder"
+    },
+    "event_type_name": {
+      "additionalProperties": false,
+      "properties": {
+        "event_type_name": {
+          "default": "uas_flight_folio",
+          "title": "Event Type Name",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": [],
+      "title": "Flight Folio Event Type"
+    },
+    "aircraft_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "registration": {
+          "default": "",
+          "title": "Registration",
+          "type": "string"
+        },
+        "subject_type": {
+          "default": "aircraft",
+          "title": "Subject Type",
+          "type": "string"
+        },
+        "subject_subtype": {
+          "default": "uas",
+          "title": "Subject Subtype",
+          "type": "string"
+        },
+        "source_type": {
+          "default": "djirc",
+          "title": "Source Type",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": [],
+      "title": "Aircraft Identity"
+    },
+    "decimation_rate": {
+      "additionalProperties": false,
+      "properties": {
+        "rate_hz": {
+          "default": 1,
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Rate Hz",
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "required": [],
+      "title": "Track Decimation Rate"
+    }
+  },
+  "$defs": {
+    "EarthRangerConnection": {
+      "properties": {
+        "name": {
+          "title": "Data Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "EarthRangerConnection",
+      "type": "object"
+    }
+  },
+  "uiSchema": {
+    "workflow_details": {
+      "ui:order": [
+        "name",
+        "description"
+      ]
+    },
+    "aircraft_identity": {
+      "ui:order": [
+        "registration",
+        "subject_type",
+        "subject_subtype",
+        "source_type"
+      ]
+    },
+    "ui:order": [
+      "workflow_details",
+      "er_client_name",
+      "dji_api_key",
+      "input_folder",
+      "event_type_name",
+      "aircraft_identity",
+      "decimation_rate"
+    ]
+  },
+  "additionalProperties": false
+}

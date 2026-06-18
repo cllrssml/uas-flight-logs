@@ -1,0 +1,296 @@
+id: uas_flight_logs
+
+requirements:
+  - name: "ecoscope-platform"
+    version: ">=2.11.3,<3"
+    channel: "https://repo.prefix.dev/ecoscope-workflows/"
+  - name: "uas-tasks"
+    path: "/home/sam/Ecoscope_Projects/uas-tasks"
+    editable: true
+
+workflow:
+  # --- Metadata ---------------------------------------------------------------
+  - name: Workflow Details
+    id: workflow_details
+    task: set_workflow_details
+
+  # --- EarthRanger connection -------------------------------------------------
+  - name: Data Source
+    id: er_client_name
+    task: set_er_connection
+
+  # --- DJI API key ------------------------------------------------------------
+  - name: DJI API Key
+    id: dji_api_key
+    task: set_dji_api_key
+
+  # --- Input folder -----------------------------------------------------------
+  - name: Flight Logs Folder
+    id: input_folder
+    task: set_input_folder
+
+  # --- ER event type ----------------------------------------------------------
+  - name: Flight Folio Event Type
+    id: event_type_name
+    task: set_event_type_name
+
+  # --- Aircraft identity (registration + ER type strings) --------------------
+  - name: Aircraft Identity
+    id: aircraft_identity
+    task: set_aircraft_identity
+
+  # --- Track decimation rate --------------------------------------------------
+  - name: Track Decimation Rate
+    id: decimation_rate
+    task: set_decimation_rate
+
+  # --- Main ingestion loop ----------------------------------------------------
+  # Iterates all .txt files in the folder. Per-file errors are recorded as
+  # 'failed' rows; the rest of the batch continues regardless.
+  - name: Ingest Flights
+    id: ingest_result
+    task: ingest_flights
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      client: ${{ workflow.er_client_name.return }}
+      dji_api_key: ${{ workflow.dji_api_key.return }}
+      input_folder: ${{ workflow.input_folder.return }}
+      event_type_name: ${{ workflow.event_type_name.return }}
+      aircraft_identity: ${{ workflow.aircraft_identity.return }}
+      decimation_rate: ${{ workflow.decimation_rate.return }}
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+
+  # --- Extract track GeoDataFrame for the map --------------------------------
+  - name: Track GeoDataFrame
+    id: track_gdf
+    task: extract_track_gdf
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      ingest_result: ${{ workflow.ingest_result.return }}
+
+  # --- Extract results DataFrame for the status table ------------------------
+  - name: Results DataFrame
+    id: results_df
+    task: extract_results_df
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      ingest_result: ${{ workflow.ingest_result.return }}
+
+  # --- Track polyline layer ---------------------------------------------------
+  - name: Track Layer
+    id: track_layer
+    task: create_polyline_layer
+    skipif:
+      conditions:
+        - any_dependency_skipped
+        - any_is_empty_df
+    partial:
+      geodataframe: ${{ workflow.track_gdf.return }}
+      tooltip_columns:
+        - aircraft_serial
+        - takeoff_utc
+        - flight_time_min
+      legend: ~
+      layer_style:
+        color_column: "track_color"
+        get_width: 3
+        width_units: pixels
+        cap_rounded: true
+
+  # --- Draw flight track map (satellite basemap, hardcoded) ------------------
+  - name: Flight Map
+    id: flight_map
+    task: draw_ecomap
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      title: null
+      tile_layers:
+        - url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          opacity: 1.0
+          max_zoom: 20
+          min_zoom: 0
+      north_arrow_style:
+        placement: top-left
+      legend_style:
+        placement: bottom-right
+      static: false
+      max_zoom: 20
+      geo_layers: ${{ workflow.track_layer.return }}
+
+  # --- Persist map HTML -------------------------------------------------------
+  - name: Persist Map
+    id: flight_map_url
+    task: persist_text
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename_suffix: flight_tracks
+      text: ${{ workflow.flight_map.return }}
+
+  # --- Draw ingestion status table -------------------------------------------
+  - name: Status Table
+    id: status_table_html
+    task: draw_table
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      dataframe: ${{ workflow.results_df.return }}
+      widget_id: "Ingestion Status"
+      table_config:
+        enable_sorting: true
+        enable_filtering: true
+        enable_download: true
+        hide_header: false
+      columns:
+        - file
+        - aircraft_serial
+        - takeoff_utc
+        - flight_time_min
+        - battery_pct_takeoff
+        - battery_pct_landing
+        - max_alt_agl_m
+        - max_speed_ms
+        - max_dist_m
+        - status
+        - error
+
+  # --- Persist table HTML -----------------------------------------------------
+  - name: Persist Table
+    id: status_table_url
+    task: persist_text
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      filename_suffix: ingestion_status
+      text: ${{ workflow.status_table_html.return }}
+
+  # --- Stat scalars -----------------------------------------------------------
+  - name: Stat - Flights Ingested
+    id: stat_ingested
+    task: count_ingested
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      ingest_result: ${{ workflow.ingest_result.return }}
+
+  - name: Stat - Flights Skipped
+    id: stat_skipped
+    task: count_skipped
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      ingest_result: ${{ workflow.ingest_result.return }}
+
+  - name: Stat - Flights Failed
+    id: stat_failed
+    task: count_failed
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      ingest_result: ${{ workflow.ingest_result.return }}
+
+  - name: Stat - Total Flight Time
+    id: stat_flight_time
+    task: format_total_flight_time
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      ingest_result: ${{ workflow.ingest_result.return }}
+
+  # --- Score-card widgets (row 1 of dashboard) --------------------------------
+  - name: Widget - Ingested
+    id: widget_ingested
+    task: create_single_value_widget_single_view
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      title: Ingested
+      data: ${{ workflow.stat_ingested.return }}
+      decimal_places: 0
+
+  - name: Widget - Skipped
+    id: widget_skipped
+    task: create_single_value_widget_single_view
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      title: Skipped
+      data: ${{ workflow.stat_skipped.return }}
+      decimal_places: 0
+
+  - name: Widget - Failed
+    id: widget_failed
+    task: create_single_value_widget_single_view
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      title: Failed
+      data: ${{ workflow.stat_failed.return }}
+      decimal_places: 0
+
+  - name: Widget - Total Flight Time
+    id: widget_flight_time
+    task: create_text_widget_single_view
+    skipif:
+      conditions:
+        - any_dependency_skipped
+    partial:
+      title: Time Flown
+      data: ${{ workflow.stat_flight_time.return }}
+
+  # --- Map widget (row 2 of dashboard) ----------------------------------------
+  - name: Map Widget
+    id: map_widget
+    task: create_map_widget_single_view
+    skipif:
+      conditions:
+        - never
+    partial:
+      title: Flight Tracks
+      data: ${{ workflow.flight_map_url.return }}
+
+  # --- Table widget (row 3 of dashboard) --------------------------------------
+  - name: Table Widget
+    id: table_widget
+    task: create_table_widget_single_view
+    skipif:
+      conditions:
+        - never
+    partial:
+      title: Ingestion Status
+      data: ${{ workflow.status_table_url.return }}
+
+  # --- Dashboard --------------------------------------------------------------
+  - name: Dashboard
+    id: dashboard
+    task: gather_dashboard
+    partial:
+      time_range: ~
+      details: ${{ workflow.workflow_details.return }}
+      widgets:
+        - ${{ workflow.widget_ingested.return }}
+        - ${{ workflow.widget_skipped.return }}
+        - ${{ workflow.widget_failed.return }}
+        - ${{ workflow.widget_flight_time.return }}
+        - ${{ workflow.map_widget.return }}
+        - ${{ workflow.table_widget.return }}

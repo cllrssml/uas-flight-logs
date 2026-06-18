@@ -1,0 +1,20 @@
+[project]
+name = "uas-tasks"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "geopandas",
+    "pandas",
+    "wt-registry>=0.2,<1",
+]
+
+[project.entry-points."wt_registry"]
+uas_tasks = "uas_tasks"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["uas_tasks"]
+artifacts = ["uas_tasks/bin/*"]

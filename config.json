@@ -1,0 +1,29 @@
+{
+  "workflow_details": {
+    "name": "UAS Flight Log Ingestion",
+    "description": "Ingest DJI Mavic 3E flight logs into EarthRanger"
+  },
+  "er_client_name": {
+    "data_source": {
+      "name": "<your-data-source>"
+    }
+  },
+  "dji_api_key": {
+    "dji_api_key": "<your-dji-api-key>"
+  },
+  "input_folder": {
+    "folder_path": "C:\\Users\\<you>\\Documents\\FlightLogs"
+  },
+  "event_type_name": {
+    "event_type_name": "uas_flight_folio"
+  },
+  "aircraft_identity": {
+    "registration": "ZT-<XXX>",
+    "subject_type": "aircraft",
+    "subject_subtype": "drone_quadcopter",
+    "source_type": "tracking-device"
+  },
+  "decimation_rate": {
+    "rate_hz": 1
+  }
+}

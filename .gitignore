@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Pixi environments
+.pixi/
+
+# Test files — contain credentials or private GPS data
+test_config.json
+config-test.json
+run_test.sh
+Sample_Logs*/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp
