@@ -281,9 +281,9 @@ def set_aircraft_identity(
                 "Find it in ER under Admin → Source Types. "
                 "Must already exist in your ER instance. Example: 'tracking-device'."
             ),
-            default="djirc",
+            default="tracking-device",
         ),
-    ] = "djirc",
+    ] = "tracking-device",
 ) -> dict:
     """Bundle aircraft identity config into a single dict for ingest_flights."""
     return {
@@ -508,7 +508,11 @@ def ingest_flights(
             max_alt_agl_m = float(log_details["maxHeight"])
             max_speed_ms = float(log_details["maxHorizontalSpeed"])
 
-            # max_dist_m: max great-circle distance from the takeoff reference point.
+            # max_dist_m and total_dist_m_gps: computed from GPS frames rather than
+            # log_details["totalDistance"] because the parser returns that field in
+            # different units depending on firmware version (km for RC Pro v13+,
+            # metres for older drones such as Mavic 2 Pro). Frame-based haversine
+            # is unit-agnostic and consistent across all log formats.
             # Flight window filter rejects pre-GPS-lock frames with garbage timestamps.
             if ref_lat != 0.0 and ref_lon != 0.0:
                 valid_pts = [
@@ -521,8 +525,14 @@ def ingest_flights(
                     (_haversine_m(ref_lat, ref_lon, lat, lon) for lat, lon in valid_pts),
                     default=0.0,
                 )
+                total_dist_m_gps = sum(
+                    _haversine_m(valid_pts[i][0], valid_pts[i][1],
+                                 valid_pts[i + 1][0], valid_pts[i + 1][1])
+                    for i in range(len(valid_pts) - 1)
+                ) if len(valid_pts) >= 2 else 0.0
             else:
                 max_dist_m = 0.0
+                total_dist_m_gps = 0.0
 
             # ------------------------------------------------------------------
             # Step 5: decimate track to decimation_rate Hz
@@ -621,7 +631,7 @@ def ingest_flights(
                     "max_alt_agl_m":       round(max_alt_agl_m, 1),
                     "max_speed_ms":        round(max_speed_ms, 1),
                     "max_dist_m":          round(max_dist_m, 1),
-                    "total_distance_m":    round(float(log_details.get("totalDistance", 0.0)) * 1000, 1),
+                    "total_distance_m":    round(total_dist_m_gps, 1),
                     "firmware":            firmware,
                     "status":              "skipped",
                 })
@@ -657,7 +667,7 @@ def ingest_flights(
                 # ------------------------------------------------------------------
                 # Step 11: post UAS Flight Folio event (skipped in tracking-only mode)
                 # ------------------------------------------------------------------
-                total_dist_m = round(float(log_details.get("totalDistance", 0.0)) * 1000, 1)
+                total_dist_m = round(total_dist_m_gps, 1)
                 if event_type_uuid:
                     event_location = (
                         {"latitude": ref_lat, "longitude": ref_lon}
@@ -710,7 +720,7 @@ def ingest_flights(
                 })
                 n_ingested += 1
                 total_flight_seconds += flight_time_s
-                total_distance_m += float(log_details.get("totalDistance", 0.0)) * 1000
+                total_distance_m += total_dist_m_gps
 
         except Exception as exc:
             row["status"] = "failed"
