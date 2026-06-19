@@ -1,8 +1,12 @@
 # UAS Flight Logs → EarthRanger
 
-An [Ecoscope Desktop](https://ecoscope.io) workflow that ingests DJI Mavic 3E flight logs (`.txt` files exported from the RC Pro controller) into EarthRanger — creating GPS tracks as Subject observations and a structured **UAS Flight Folio** event per flight.
+An [Ecoscope Desktop](https://ecoscope.io) workflow that ingests DJI flight logs (`.txt` files exported from the DJI RC Pro controller) into EarthRanger — creating GPS tracks as Subject observations and a structured **UAS Flight Folio** event per flight.
 
 Built for conservation organisations using DJI drones alongside EarthRanger for ranger coordination and wildlife monitoring.
+
+> **Tested on:** DJI Mavic 3T + RC Pro controller.
+> Any DJI drone that pairs with the RC Pro and exports `.txt` logs should work in principle.
+> Community testing on other drone/controller combinations is very welcome — please open an issue or post in the [EarthRanger Community Forum](https://community.earthranger.com/c/ecoscope/16) with your results.
 
 ---
 
@@ -12,25 +16,36 @@ For each `.txt` log file in a folder you specify:
 
 1. Decrypts and parses the DJI RC Pro log (requires a DJI developer API key)
 2. Gets or creates an EarthRanger **Subject** and **Source** for the aircraft (keyed on serial number)
-3. Checks whether this flight has already been ingested (idempotent — safe to re-run)
+3. Checks whether this flight has already been ingested — safe to re-run against the same folder
 4. Posts **GPS track observations** to EarthRanger at 1 Hz (configurable)
 5. Posts a **UAS Flight Folio event** with flight metadata (times, battery, altitude, speed, distance)
 6. Saves a KML file per flight to the results folder
 
-The dashboard shows a live satellite map of all flight tracks, ingestion status per file, and summary stats (flights ingested / skipped / failed / total time flown).
+The dashboard shows a live satellite map of all flight tracks, an ingestion status table per file, and summary stats (flights ingested / skipped / failed / total time flown / total distance / aircraft count).
+
+---
+
+## Compatibility
+
+| Component | Requirement |
+|---|---|
+| Controller | **DJI RC Pro** — the `.txt` log format is specific to this controller. Other DJI controllers (RC-N1, Smart Controller) export `.dat` files and are not supported. |
+| Drone | Any DJI drone compatible with the RC Pro (Mavic 3 series, Mini 4 Pro, Air 3, Avata 2, etc.) |
+| Platform | Ecoscope Desktop (Windows). macOS support is not yet included — see [Known Limitations](#known-limitations). |
+| EarthRanger | Any hosted EarthRanger instance |
 
 ---
 
 ## Requirements
 
-- [Ecoscope Desktop](https://ecoscope.io/desktop) (Windows or macOS)
-- An EarthRanger instance with:
+- [Ecoscope Desktop](https://ecoscope.io/desktop)
+- An EarthRanger instance configured with:
   - A **Subject Type** for your aircraft (e.g. `aircraft`)
   - A **Subject Subtype** (e.g. `drone_quadcopter`)
-  - A **Source Type** for GPS tracks from the RC Pro (e.g. `tracking-device`)
+  - A **Source Type** for GPS tracks (e.g. `tracking-device`)
   - A **UAS Flight Folio** event type — see [Event Type Setup](#event-type-setup) below
 - A [DJI developer API key](https://developer.dji.com/) (required to decrypt RC Pro v13+ logs)
-- DJI Mavic 3E / RC Pro flight logs exported via USB as `.txt` files
+- DJI RC Pro flight logs exported as `.txt` files via USB
 
 ---
 
@@ -38,74 +53,78 @@ The dashboard shows a live satellite map of all flight tracks, ingestion status 
 
 1. In Ecoscope Desktop, go to **Workflow Templates → + Add Template**
 2. Paste this repository URL and click **Add**
-3. Desktop will install the workflow automatically
+3. Desktop installs the workflow automatically
 
 ---
 
 ## Getting a DJI API Key
 
-DJI RC Pro logs (firmware v13+) are encrypted. The workflow uses your DJI developer **App Key** (also called SDK Key) to fetch the decryption keychain from DJI's servers the first time each log is processed.
+DJI RC Pro logs (firmware v13+) are encrypted. The workflow uses your DJI developer **App Key** (also called SDK Key) to fetch the decryption keychain from DJI's servers the first time each log is processed. Subsequent runs use a locally cached keychain.
 
 1. Go to [developer.dji.com](https://developer.dji.com/) and sign in (or create a free account using your DJI username)
 2. Click **Apps** in the top navigation → **Create App**
 3. Fill in any app name and description — the values do not matter for log decryption
 4. Select **Mobile SDK** as the SDK type
-5. Once created, open your app and go to the **App Detail** page
-6. Copy the **SDK Key** — this is your DJI API Key
+5. Once created, open the app detail page and copy the **SDK Key**
 
-Paste this key into the **DJI API Key** field when configuring the workflow. The key is only sent to DJI's servers on the first decrypt of each log file; subsequent runs use a locally cached keychain and do not require internet access to DJI.
+Paste this key into the **DJI API Key** field when configuring the workflow.
 
-> **Note:** The key is tied to your DJI developer account. Each organisation running this workflow should register their own free account and use their own key.
+> Each organisation should register their own free DJI developer account and use their own key.
 
 ---
 
 ## Configuration
 
-| Field | Description |
-|---|---|
-| **Data Source** | Your EarthRanger connection configured in Desktop |
-| **DJI API Key** | Your DJI developer API key for decrypting RC Pro logs |
-| **Flight Logs Folder** | Path to a folder containing `.txt` log files exported from the RC Pro |
-| **Flight Folio Event Type** | Slug of the UAS Flight Folio event type in ER (default: `uas_flight_folio`) |
-| **Aircraft Registration** | Legal registration number (e.g. `ZT-001407`). Leave blank if unregistered |
-| **Subject Type** | ER subject type slug for this aircraft (e.g. `aircraft`) |
-| **Subject Subtype** | ER subject subtype slug (e.g. `drone_quadcopter`) |
-| **Source Type** | ER source type slug for GPS tracks (e.g. `tracking-device`) |
-| **Track Decimation Rate** | Observations per second to post to ER (default: 1 Hz). Higher = more detail, slower upload |
+| Field | Default | Description |
+|---|---|---|
+| **Data Source** | — | Your EarthRanger connection configured in Desktop |
+| **DJI API Key** | — | Your DJI developer API key |
+| **Flight Logs Folder** | — | Path to the folder containing `.txt` log files |
+| **Flight Folio Event Type** | `uas_flight_folio` | Slug of the UAS Flight Folio event type in ER |
+| **Aircraft Registration** | *(blank)* | Legal registration number (e.g. `ZT-001407`). Leave blank if unregistered |
+| **Subject Type** | `aircraft` | ER subject type slug for this aircraft |
+| **Subject Subtype** | `uas` | ER subject subtype slug |
+| **Source Type** | `djirc` | ER source type slug for GPS tracks |
+| **Track Decimation Rate** | `1` Hz | GPS fixes per second to post to ER (1–10). Higher = more detail, slower upload |
+
+Adjust **Subject Type**, **Subject Subtype**, and **Source Type** to match whatever slugs exist in your ER instance. The values shown above are suggestions — use whatever your ER admin has already created.
 
 ---
 
 ## Event Type Setup
 
-Create a **UAS Flight Folio** event type in ER Admin → Event Types using EFE v2. Set the slug (Value) to `uas_flight_folio` and add the following fields. All fields should be **not required** (the workflow auto-fills them).
+Create a **UAS Flight Folio** event type in your ER instance before running the workflow. Use the **Form Builder** at `https://<your-er-instance>/admin/form-builder/`.
 
-**Section 1 — Flight Identity**
+Set:
+- **Display name:** UAS Flight Folio (or any label you prefer)
+- **Value (slug):** `uas_flight_folio` — must match the **Flight Folio Event Type** field in the workflow config
+- Mark all fields as **not required** — the workflow auto-fills the technical sections; the operational section is completed manually after a flight
 
+### Field reference
+
+#### Section 1 — Flight Identity *(auto-filled)*
 | Display Name | API Key | Type |
 |---|---|---|
 | Aircraft Serial | `aircraft_serial` | Free Text |
 | Aircraft Registration | `aircraft_registration` | Free Text |
 | Flight Key | `flight_key` | Free Text |
 
-**Section 2 — Timing**
-
+#### Section 2 — Timing *(auto-filled)*
 | Display Name | API Key | Type |
 |---|---|---|
 | Flight Date | `flight_date` | Date |
-| Start Time (UTC) | `start_time_utc` | Free Text |
-| End Time (UTC) | `end_time_utc` | Free Text |
+| Start Time (UTC) | `start_time_utc` | Date/Time |
+| End Time (UTC) | `end_time_utc` | Date/Time |
 | Flight Duration (min) | `flight_time_min` | Number |
 
-**Section 3 — Battery**
-
+#### Section 3 — Battery *(auto-filled)*
 | Display Name | API Key | Type |
 |---|---|---|
 | Battery % at Takeoff | `battery_pct_takeoff` | Number (0–100) |
 | Battery % at Landing | `battery_pct_landing` | Number (0–100) |
 | Battery Serial | `battery_serial` | Free Text |
 
-**Section 4 — Performance Envelope**
-
+#### Section 4 — Performance Envelope *(auto-filled)*
 | Display Name | API Key | Type |
 |---|---|---|
 | Max Altitude AGL (m) | `max_alt_agl_m` | Number |
@@ -113,48 +132,86 @@ Create a **UAS Flight Folio** event type in ER Admin → Event Types using EFE v
 | Max Distance from Home (m) | `max_dist_m` | Number |
 | Total Distance (m) | `total_distance_m` | Number |
 
-**Section 5 — Operational**
+#### Section 5 — Operational *(fill in manually after each flight)*
+| Display Name | API Key | Type | Notes |
+|---|---|---|---|
+| Journey From | `journey_from` | Free Text | Departure location |
+| Journey To | `journey_to` | Free Text | Destination location |
+| Nature of Flight | `nature_of_flight` | Dropdown or Free Text | See note below |
+| Remote Pilot | `remote_pilot` | Free Text | |
+| UA Observer | `ua_observer` | Free Text | |
+| Defects | `defects` | Long Text | |
 
-| Display Name | API Key | Type |
-|---|---|---|
-| Journey From | `journey_from` | Free Text |
-| Journey To | `journey_to` | Free Text |
-| Nature of Flight | `nature_of_flight` | List (R / V / E / B / D-VLOS) |
-| Remote Pilot | `remote_pilot` | Free Text |
-| UA Observer | `ua_observer` | Free Text |
-| Defects | `defects` | Scrolling Text |
+> **Note on `nature_of_flight`:** In the reference implementation this is a dropdown linked to a custom choice list (`R / V / E / B / D-VLOS`). If you want a dropdown, create a choice list named `nature_of_flight` in your ER Admin first, then reference it here. Alternatively, use a plain **Free Text** field — the workflow will populate it as empty regardless.
 
-**Section 6 — Technical**
-
+#### Section 6 — Technical *(auto-filled)*
 | Display Name | API Key | Type |
 |---|---|---|
 | Home Point Latitude | `home_lat` | Number |
 | Home Point Longitude | `home_lon` | Number |
 | Firmware Version | `firmware` | Free Text |
 
+> **Note on Firmware Version:** This field is populated from the DJI Fly **app version** recorded in the log, not the drone's firmware version. The DJI log format does not expose drone firmware directly.
+
+### JSON schema (for API-based setup)
+
+The Form Builder does not have a JSON import button. If your ER administrator prefers to create the event type via the EarthRanger REST API rather than the Form Builder UI, the full EFE v2 schema is provided in [`uas_flight_folio_schema.json`](uas_flight_folio_schema.json) at the root of this repository.
+
+---
+
+## Dashboard
+
+| Widget | Description |
+|---|---|
+| **Ingested** | Flights posted to ER this run |
+| **Skipped** | Flights already in ER (duplicate check passed) |
+| **Failed** | Files that could not be parsed or posted |
+| **Time Flown** | Total airborne time across ingested flights |
+| **Distance** | Total GPS track distance across ingested flights |
+| **Aircraft** | Number of unique aircraft serials in this batch |
+| **Flight Tracks** | Satellite map — each flight coloured distinctly |
+| **Ingestion Status** | Per-file table with metrics and error messages |
+
 ---
 
 ## Notes
 
-**Idempotency** — The workflow checks EarthRanger before posting each flight. If a UAS Flight Folio event with the same flight key (`{serial}_{takeoff_utc}`) already exists, the flight is skipped. Re-running against the same folder is safe.
+**Idempotency** — Before posting each flight, the workflow checks whether a UAS Flight Folio event already exists at the same takeoff time (±10 seconds). If found, the flight is skipped. Re-running against the same folder is safe.
 
-**Source provider** — The workflow automatically creates a `DJI RC Pro` source provider in ER on first run. New aircraft sources are registered under this provider.
+**Multiple aircraft** — The workflow handles mixed folders. Each aircraft gets its own ER Subject and Source, keyed on serial number.
+
+**Source provider** — The workflow automatically creates a `DJI RC Pro` source provider in ER on first run.
+
+**Operational fields** — Section 5 (journey, pilot, observer, defects) requires manual completion in EarthRanger after ingestion. These fields cannot be auto-filled from the log.
 
 **KML files** — Full-resolution KML tracks are saved alongside the HTML results for each run.
 
-**Logs from multiple aircraft** — The workflow handles mixed folders. Each aircraft gets its own ER Subject and Source, keyed on serial number.
+---
+
+## Known Limitations
+
+- **macOS:** No macOS binary is bundled for the `dji-log` parser. macOS support requires building [`dji-log`](https://github.com/lvauvillier/dji-log-parser) from source and replacing the binary in `uas-tasks/uas_tasks/bin/`.
+- **Non-RC-Pro controllers:** `.dat` logs from older DJI controllers are not supported.
+- **Corrupt timestamps:** A small number of RC Pro logs have epoch (1970) timestamps on every frame. The workflow falls back to the filename date/time in this case — the date will be correct but the time may reflect local device time rather than UTC.
+- **Firmware version:** Populated from the DJI Fly app version in the log, not the drone's actual firmware.
 
 ---
 
 ## Troubleshooting
 
-**"Event type not found"** — The `uas_flight_folio` event type does not exist in your ER instance. Create it following the [Event Type Setup](#event-type-setup) section above.
+**"Event type not found"** — The `uas_flight_folio` slug does not exist in your ER instance. Create the event type following [Event Type Setup](#event-type-setup) above, or update the **Flight Folio Event Type** field to match your existing slug.
 
-**"dji-log binary not found"** — The bundled parser binary was not found. This should not happen with a standard Desktop install — please open an issue.
+**Flights showing as Failed** — Check the Ingestion Status table for the error message. Common causes: wrong DJI API key, corrupted log file, or a log with no valid GPS frames.
 
-**Flights showing as Failed** — Check the Ingestion Status table in the dashboard for the error message. Common causes: corrupted log file, wrong DJI API key (v13+ RC Pro logs are encrypted), or a log file with no valid GPS frames.
+**Observations not visible in ER** — Check that the Subject-Source assignment in ER Admin covers the date range of your flights. The workflow sets the lower bound to 2000-01-01.
 
-**Observations not visible in ER** — Check that the Subject-Source assignment in ER Admin covers the date range of your flights. The workflow sets the assignment start to 2000-01-01, but if you had an earlier install the range may need to be updated manually.
+**Slow runs / timeout errors** — If DJI's decryption API is unreachable, each file will fail after a 120-second timeout and be recorded as Failed. Check your internet connection and try again.
+
+---
+
+## Community
+
+This workflow is the first community-contributed Ecoscope Platform SDK workflow for drone operations. If you are using it with a different DJI drone or controller combination, your results are valuable — please share them on the [EarthRanger Community Forum](https://community.earthranger.com/c/ecoscope/16) or open a GitHub issue.
 
 ---
 
