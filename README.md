@@ -83,7 +83,7 @@ Paste this key into the **DJI API Key** field when configuring the workflow.
 | **Flight Folio Event Type** | `uas_flight_folio` | Slug of the UAS Flight Folio event type in ER. Leave blank for tracking-only mode (GPS tracks only, no Flight Folio events) |
 | **Aircraft Registration** | *(blank)* | Legal registration number (e.g. `ZT-001407`). Leave blank if unregistered |
 | **Subject Type** | `aircraft` | ER subject type slug for this aircraft |
-| **Subject Subtype** | `uas` | ER subject subtype slug |
+| **Subject Subtype** | `drone_quadcopter` | ER subject subtype slug |
 | **Source Type** | `djirc` | ER source type slug for GPS tracks |
 | **Track Decimation Rate** | `1` Hz | GPS fixes per second to post to ER (1–10). Higher = more detail, slower upload |
 

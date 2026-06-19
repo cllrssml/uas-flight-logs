@@ -269,9 +269,9 @@ def set_aircraft_identity(
                 "Find it in ER under Admin → Subject Types → (your type) → Subtypes. "
                 "Must already exist in your ER instance. Example: 'drone_quadcopter'."
             ),
-            default="uas",
+            default="drone_quadcopter",
         ),
-    ] = "uas",
+    ] = "drone_quadcopter",
     source_type: Annotated[
         str,
         Field(
