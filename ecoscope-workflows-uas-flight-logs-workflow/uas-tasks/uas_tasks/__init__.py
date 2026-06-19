@@ -203,7 +203,9 @@ def set_input_folder(
                 "Full path to the folder containing DJI .txt flight records exported via USB from your DJI controller. "
                 "All .txt files in this folder will be processed. "
                 "On Windows use a path like C:\\Users\\you\\Documents\\FlightLogs. "
-                "On the Desktop app the folder must be accessible from the machine running the workflow."
+                "On macOS use a path like /Users/you/Documents/FlightLogs. "
+                "Important: avoid spaces in the folder path on macOS (use underscores or remove spaces). "
+                "The folder must be accessible from the machine running the workflow."
             ),
         ),
     ],

@@ -206,6 +206,8 @@ The Form Builder does not have a JSON import button. If your ER administrator pr
 
 **Slow runs / timeout errors** — If DJI's decryption API is unreachable, each file will fail after a 120-second timeout and be recorded as Failed. Check your internet connection and try again.
 
+**macOS: "Got unexpected extra argument" error** — Ecoscope Desktop on macOS does not yet quote the config JSON correctly when passing it to the shell. If your flight logs folder path contains a space (e.g. `DJI Logs`), the shell splits the argument and the workflow fails before it starts. **Fix:** rename the folder to remove the space (e.g. `DJI_Logs` or `DJILogs`) and re-enter the path without quotes.
+
 ---
 
 ## Community
