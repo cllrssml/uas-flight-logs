@@ -391,7 +391,7 @@ def ingest_flights(
     # Ensure the DJI source provider exists — idempotent (ER returns error if duplicate, we ignore it).
     _DJI_PROVIDER_KEY = "dji_rc_pro"
     try:
-        client.post_sourceproviders(provider_key=_DJI_PROVIDER_KEY, display_name="DJI RC Pro")
+        client.post_sourceproviders(provider_key=_DJI_PROVIDER_KEY, display_name="DJI")
     except Exception:
         pass
 
