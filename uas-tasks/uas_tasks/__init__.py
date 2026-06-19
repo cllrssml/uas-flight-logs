@@ -10,6 +10,7 @@ downstream pull individual components from that bundle.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -120,6 +121,21 @@ def _empty_track_gdf() -> gpd.GeoDataFrame:
 def _parse_dt(dt_str: str) -> datetime:
     """Parse an ISO 8601 UTC string (with Z or +00:00 suffix) to a timezone-aware datetime."""
     return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+
+
+def _datetime_from_filename(filepath: Path) -> datetime | None:
+    """Extract datetime from DJI filename: DJIFlightRecord_YYYY-MM-DD_[HH-MM-SS].txt.
+    The RC Pro records local device time; we store it as UTC (caller notes the caveat).
+    """
+    m = re.search(r"(\d{4}-\d{2}-\d{2})_\[(\d{2})-(\d{2})-(\d{2})\]", filepath.stem)
+    if not m:
+        return None
+    try:
+        y, mo, d = (int(x) for x in m.group(1).split("-"))
+        h, mi, s = int(m.group(2)), int(m.group(3)), int(m.group(4))
+        return datetime(y, mo, d, h, mi, s, tzinfo=timezone.utc)
+    except Exception:
+        return None
 
 
 def _in_flight_window(dt_str: str, window_start: datetime, window_end: datetime) -> bool:
@@ -436,6 +452,7 @@ def ingest_flights(
             # DJI drones didn't exist before 2015; any earlier year is garbage.
             _MIN_YEAR = 2015
             if takeoff_dt.year < _MIN_YEAR:
+                # Scan forward through airborne frames for a sane timestamp.
                 for f in frames[takeoff_idx:]:
                     try:
                         dt = _parse_dt(f["custom"]["dateTime"])
@@ -444,6 +461,12 @@ def ingest_flights(
                             break
                     except Exception:
                         continue
+            if takeoff_dt.year < _MIN_YEAR:
+                # All frame timestamps are corrupt — fall back to the filename date/time.
+                # The RC Pro uses local device time; we store it as-is (labelled UTC).
+                fallback = _datetime_from_filename(filepath)
+                if fallback is not None:
+                    takeoff_dt = fallback
             if landing_dt.year < _MIN_YEAR:
                 landing_dt = takeoff_dt
 
