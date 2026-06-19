@@ -1,30 +1,15 @@
-dji-log-parser binaries
-=======================
+dji-log-parser binaries (v0.5.7)
+=================================
 
-This directory holds the platform-specific dji-log-parser binaries.
-The workflow package ships without them (they are git-ignored); you must
-place the correct binary here before running ingest_flights.
+Bundled binaries for all supported platforms. These are used by
+uas_tasks/_binary.py to decrypt and parse DJI RC Pro .txt flight logs.
 
-Download
---------
-Go to: https://github.com/lvauvillier/dji-log-parser/releases
+  dji-log-linux-x86_64       Linux x86_64
+  dji-log-win-x86_64.exe     Windows x86_64
+  dji-log-macos-universal    macOS universal (x86_64 + arm64)
 
-Download the binary for your platform and place it in this directory:
+Source: https://github.com/lvauvillier/dji-log-parser/releases/tag/v0.5.7
+Licence: MIT
 
-  Linux  : dji-log-parser-linux-x86_64
-  Windows: dji-log-parser-win-x86_64.exe
-  macOS  : dji-log-parser-macos-x86_64
-
-After downloading on Linux/macOS, make the binary executable:
-  chmod +x uas_tasks/bin/dji-log-parser-linux-x86_64
-
-Version pinning
----------------
-Pin the release version in CLAUDE.md and the workflow README so that
-testers know which version was validated.
-
-Fallback path
--------------
-If the binary is not present in this directory, uas_tasks/_binary.py
-also checks ~/bin/dji-log-parser (Linux/macOS) or ~/bin/dji-log-parser.exe
-(Windows) — useful during local development.
+If the bundled binary for your platform is absent, _binary.py also checks
+~/bin/dji-log (Linux/macOS) or ~/bin/dji-log.exe (Windows) as a fallback.

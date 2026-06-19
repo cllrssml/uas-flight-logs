@@ -182,7 +182,7 @@ def set_dji_api_key(
             title="DJI API Key",
             description=(
                 "Your DJI developer API key (also called 'App Key' or 'SDK Key'). "
-                "Required to decrypt RC Pro flight records using DJI firmware v13+. "
+                "Required to decrypt DJI .txt flight logs using firmware v13+. "
                 "Find it at developer.dji.com → your apps → app detail page → 'SDK key'. "
                 "The key is used once per file to fetch the decryption keychain from DJI; "
                 "the keychain is cached, so DJI connectivity is only needed on first decrypt."
@@ -200,7 +200,7 @@ def set_input_folder(
         Field(
             title="Flight Logs Folder",
             description=(
-                "Full path to the folder containing DJI .txt flight records exported from the RC Pro via USB. "
+                "Full path to the folder containing DJI .txt flight records exported via USB from your DJI controller. "
                 "All .txt files in this folder will be processed. "
                 "On Windows use a path like C:\\Users\\you\\Documents\\FlightLogs. "
                 "On the Desktop app the folder must be accessible from the machine running the workflow."
@@ -274,7 +274,7 @@ def set_aircraft_identity(
         Field(
             title="Source Type",
             description=(
-                "EarthRanger source type slug for GPS tracks from the DJI RC Pro. "
+                "EarthRanger source type slug for GPS tracks from your DJI aircraft. "
                 "Find it in ER under Admin → Source Types. "
                 "Must already exist in your ER instance. Example: 'tracking-device'."
             ),

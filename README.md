@@ -31,7 +31,7 @@ The dashboard shows a live satellite map of all flight tracks, an ingestion stat
 |---|---|
 | Controller | **DJI RC Pro** — the `.txt` log format is specific to this controller. Other DJI controllers (RC-N1, Smart Controller) export `.dat` files and are not supported. |
 | Drone | Any DJI drone compatible with the RC Pro (Mavic 3 series, Mini 4 Pro, Air 3, Avata 2, etc.) |
-| Platform | Ecoscope Desktop (Windows). macOS support is not yet included — see [Known Limitations](#known-limitations). |
+| Platform | Ecoscope Desktop (Windows, macOS) |
 | EarthRanger | Any hosted EarthRanger instance |
 
 ---
@@ -190,7 +190,6 @@ The Form Builder does not have a JSON import button. If your ER administrator pr
 
 ## Known Limitations
 
-- **macOS:** No macOS binary is bundled for the `dji-log` parser. macOS support requires building [`dji-log`](https://github.com/lvauvillier/dji-log-parser) from source and replacing the binary in `uas-tasks/uas_tasks/bin/`.
 - **Non-RC-Pro controllers:** `.dat` logs from older DJI controllers are not supported.
 - **Corrupt timestamps:** A small number of RC Pro logs have epoch (1970) timestamps on every frame. The workflow falls back to the filename date/time in this case — the date will be correct but the time may reflect local device time rather than UTC.
 - **Firmware version:** Populated from the DJI Fly app version in the log, not the drone's actual firmware.
