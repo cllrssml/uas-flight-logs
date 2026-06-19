@@ -204,7 +204,7 @@ def set_input_folder(
                 "All .txt files in this folder will be processed. "
                 "On Windows use a path like C:\\Users\\you\\Documents\\FlightLogs. "
                 "On macOS use a path like /Users/you/Documents/FlightLogs. "
-                "Important: avoid spaces in the folder path on macOS (use underscores or remove spaces). "
+                "Important: on macOS, avoid spaces in the folder path (e.g. use DJI_Logs not DJI Logs). "
                 "The folder must be accessible from the machine running the workflow."
             ),
         ),
