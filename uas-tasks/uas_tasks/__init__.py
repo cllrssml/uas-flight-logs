@@ -603,22 +603,47 @@ def ingest_flights(
             source_id = _source_cache[aircraft_serial]
 
             # ------------------------------------------------------------------
-            # Step 9: idempotency check — query observations by source + time.
-            # Checks whether GPS observations already exist for this source in
-            # a ±2s window around takeoff. Works in both full and tracking-only
-            # mode, and remains correct even if Flight Folio events are later
-            # deleted from ER (event-based checks would re-post observations).
+            # Step 9: dual idempotency check — observations + event independently.
+            #
+            # has_observations: GPS track already in ER → never re-post obs.
+            # has_event: Flight Folio event already in ER → never re-post event.
+            #
+            # This means:
+            #   obs ✓  event ✓  → fully done, skip everything
+            #   obs ✓  event ✗  → re-post event only (e.g. after accidental deletion)
+            #   obs ✗  event ✓  → post observations only (rare edge case)
+            #   obs ✗  event ✗  → full ingest
             # ------------------------------------------------------------------
             flight_key = f"{aircraft_serial}_{takeoff_dt.strftime('%Y%m%dT%H%M%SZ')}"
+
             existing_obs = client._get_observations(
                 source_ids=source_id,
                 since=(takeoff_dt - timedelta(seconds=2)).isoformat(),
                 until=(takeoff_dt + timedelta(seconds=2)).isoformat(),
             )
-            is_duplicate = not existing_obs.empty
+            has_observations = not existing_obs.empty
 
-            if is_duplicate:
-                # Already in ER — persist KML but skip all ER writes
+            has_event = False
+            if event_type_uuid:
+                candidates = client.get_events(
+                    event_type=[event_type_uuid],
+                    since=(takeoff_dt - timedelta(seconds=10)).isoformat(),
+                    until=(takeoff_dt + timedelta(seconds=10)).isoformat(),
+                )
+                if not candidates.empty:
+                    for _, ev in candidates.iterrows():
+                        try:
+                            ev_time = _parse_dt(str(ev.get("time") or ""))
+                            if abs((ev_time - takeoff_dt).total_seconds()) <= 10:
+                                has_event = True
+                                break
+                        except Exception:
+                            continue
+
+            fully_done = has_observations and (not event_type_uuid or has_event)
+
+            if fully_done:
+                # Both observations and event (if applicable) already in ER — skip.
                 if kml_text:
                     _write_kml(kml_text, aircraft_serial, takeoff_dt, results_dir, kml_paths)
                 row.update({
@@ -639,36 +664,37 @@ def ingest_flights(
 
             else:
                 # ------------------------------------------------------------------
-                # Step 10: post decimated track observations to EarthRanger
+                # Step 10: post observations (only if not already in ER)
                 # ------------------------------------------------------------------
-                airborne_all = [
-                    f for f in frames_dec
-                    if f["osd"]["latitude"] != 0.0 and f["osd"]["longitude"] != 0.0
-                    and not f["osd"]["isOnGround"]
-                    and _in_flight_window(f["custom"]["dateTime"], _win_start, _win_end)
-                ]
-                if airborne_all:
-                    obs_gdf = gpd.GeoDataFrame(
-                        {
-                            "source": [source_id] * len(airborne_all),
-                            "recorded_at": [f["custom"]["dateTime"] for f in airborne_all],
-                            "device_status_properties": [
-                                {"altitude": f["osd"]["height"]} for f in airborne_all
-                            ],
-                        },
-                        geometry=gpd.points_from_xy(
-                            [f["osd"]["longitude"] for f in airborne_all],
-                            [f["osd"]["latitude"] for f in airborne_all],
-                        ),
-                        crs="EPSG:4326",
-                    )
-                    client.post_observations(obs_gdf)
+                if not has_observations:
+                    airborne_all = [
+                        f for f in frames_dec
+                        if f["osd"]["latitude"] != 0.0 and f["osd"]["longitude"] != 0.0
+                        and not f["osd"]["isOnGround"]
+                        and _in_flight_window(f["custom"]["dateTime"], _win_start, _win_end)
+                    ]
+                    if airborne_all:
+                        obs_gdf = gpd.GeoDataFrame(
+                            {
+                                "source": [source_id] * len(airborne_all),
+                                "recorded_at": [f["custom"]["dateTime"] for f in airborne_all],
+                                "device_status_properties": [
+                                    {"altitude": f["osd"]["height"]} for f in airborne_all
+                                ],
+                            },
+                            geometry=gpd.points_from_xy(
+                                [f["osd"]["longitude"] for f in airborne_all],
+                                [f["osd"]["latitude"] for f in airborne_all],
+                            ),
+                            crs="EPSG:4326",
+                        )
+                        client.post_observations(obs_gdf)
 
                 # ------------------------------------------------------------------
-                # Step 11: post UAS Flight Folio event (skipped in tracking-only mode)
+                # Step 11: post event (only if not already in ER and not tracking-only)
                 # ------------------------------------------------------------------
                 total_dist_m = round(total_dist_m_gps, 1)
-                if event_type_uuid:
+                if event_type_uuid and not has_event:
                     event_location = (
                         {"latitude": ref_lat, "longitude": ref_lon}
                         if ref_lat != 0.0 else None
