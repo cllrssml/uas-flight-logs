@@ -221,10 +221,11 @@ def set_event_type_name(
             title="Flight Folio Event Type",
             description=(
                 "The EarthRanger event type slug for UAS Flight Folio records. "
-                "This event type must already exist in your ER instance before running the workflow. "
                 "The slug is the lowercase-underscore identifier shown in the ER admin panel "
                 "(Admin → Event Types → slug column), not the display name. "
-                "Example: 'uas_flight_folio'."
+                "Example: 'uas_flight_folio'. "
+                "Leave blank to run in tracking-only mode — GPS tracks will be posted to ER "
+                "but no Flight Folio events will be created."
             ),
             default="uas_flight_folio",
         ),
@@ -364,15 +365,19 @@ def ingest_flights(
 
     # Look up event type UUID once — each org's ER has a different UUID for their
     # copy of the event type, so we resolve it from the slug at runtime.
-    event_types_df = client.get_event_types()
-    et_match = event_types_df[event_types_df["value"] == event_type_name].drop_duplicates("id")
-    if et_match.empty:
-        raise ValueError(
-            f"Event type '{event_type_name}' not found in EarthRanger. "
-            "Create it in ER Admin → Event Types using the EFE v2 template in the "
-            f"repository README, with slug set to '{event_type_name}'."
-        )
-    event_type_uuid = str(et_match.iloc[0]["id"])
+    # Empty event_type_name = tracking-only mode (GPS tracks only, no Flight Folio events).
+    if event_type_name:
+        event_types_df = client.get_event_types()
+        et_match = event_types_df[event_types_df["value"] == event_type_name].drop_duplicates("id")
+        if et_match.empty:
+            raise ValueError(
+                f"Event type '{event_type_name}' not found in EarthRanger. "
+                "Create it in ER Admin → Event Types using the EFE v2 template in the "
+                f"repository README, with slug set to '{event_type_name}'."
+            )
+        event_type_uuid = str(et_match.iloc[0]["id"])
+    else:
+        event_type_uuid = None
 
     txt_files = sorted(folder.glob("*.txt"))
 
@@ -588,29 +593,35 @@ def ingest_flights(
             source_id = _source_cache[aircraft_serial]
 
             # ------------------------------------------------------------------
-            # Step 9: idempotency check — query ER event ledger by event time.
-            # We use a ±10s window around takeoff_dt rather than matching a
-            # flight_key in event_details, because ER does not reliably return
-            # event_details fields in list queries even with include_details=True.
-            # Real flights are never within 10 s of each other.
+            # Step 9: idempotency check.
+            # Full mode: query Flight Folio events by time (±10s around takeoff).
+            # Tracking-only: query observations by source + time (±2s around
+            # takeoff). Both use ER as source of truth; no local state required.
             # ------------------------------------------------------------------
             flight_key = f"{aircraft_serial}_{takeoff_dt.strftime('%Y%m%dT%H%M%SZ')}"
-            candidates = client.get_events(
-                event_type=[event_type_uuid],
-                since=(takeoff_dt - timedelta(seconds=10)).isoformat(),
-                until=(takeoff_dt + timedelta(seconds=10)).isoformat(),
-            )
-
             is_duplicate = False
-            if not candidates.empty:
-                for _, ev in candidates.iterrows():
-                    try:
-                        ev_time = _parse_dt(str(ev.get("time") or ""))
-                        if abs((ev_time - takeoff_dt).total_seconds()) <= 10:
-                            is_duplicate = True
-                            break
-                    except Exception:
-                        continue
+            if event_type_uuid:
+                candidates = client.get_events(
+                    event_type=[event_type_uuid],
+                    since=(takeoff_dt - timedelta(seconds=10)).isoformat(),
+                    until=(takeoff_dt + timedelta(seconds=10)).isoformat(),
+                )
+                if not candidates.empty:
+                    for _, ev in candidates.iterrows():
+                        try:
+                            ev_time = _parse_dt(str(ev.get("time") or ""))
+                            if abs((ev_time - takeoff_dt).total_seconds()) <= 10:
+                                is_duplicate = True
+                                break
+                        except Exception:
+                            continue
+            else:
+                existing_obs = client._get_observations(
+                    source_ids=source_id,
+                    since=(takeoff_dt - timedelta(seconds=2)).isoformat(),
+                    until=(takeoff_dt + timedelta(seconds=2)).isoformat(),
+                )
+                is_duplicate = not existing_obs.empty
 
             if is_duplicate:
                 # Already in ER — persist KML but skip all ER writes
@@ -660,37 +671,38 @@ def ingest_flights(
                     client.post_observations(obs_gdf)
 
                 # ------------------------------------------------------------------
-                # Step 11: post UAS Flight Folio event
+                # Step 11: post UAS Flight Folio event (skipped in tracking-only mode)
                 # ------------------------------------------------------------------
-                event_location = (
-                    {"latitude": ref_lat, "longitude": ref_lon}
-                    if ref_lat != 0.0 else None
-                )
                 total_dist_m = round(float(log_details.get("totalDistance", 0.0)) * 1000, 1)
-                client.post_event({
-                    "event_type": event_type_name,
-                    "time": takeoff_dt.isoformat(),
-                    "location": event_location,
-                    "event_details": {
-                        "flight_key":            flight_key,
-                        "aircraft_serial":       aircraft_serial,
-                        "aircraft_registration": aircraft_identity["registration"],
-                        "flight_date":           takeoff_dt.date().isoformat(),
-                        "start_time_utc":        takeoff_dt.isoformat(),
-                        "end_time_utc":          landing_dt.isoformat(),
-                        "flight_time_min":       round(flight_time_s / 60, 1),
-                        "battery_pct_takeoff":   battery_pct_takeoff,
-                        "battery_pct_landing":   battery_pct_landing,
-                        "battery_serial":        battery_serial,
-                        "max_alt_agl_m":         round(max_alt_agl_m, 1),
-                        "max_speed_ms":          round(max_speed_ms, 1),
-                        "max_dist_m":            round(max_dist_m, 1),
-                        "total_distance_m":      total_dist_m,
-                        "home_lat":              ref_lat,
-                        "home_lon":              ref_lon,
-                        "firmware":              firmware,
-                    },
-                })
+                if event_type_uuid:
+                    event_location = (
+                        {"latitude": ref_lat, "longitude": ref_lon}
+                        if ref_lat != 0.0 else None
+                    )
+                    client.post_event({
+                        "event_type": event_type_name,
+                        "time": takeoff_dt.isoformat(),
+                        "location": event_location,
+                        "event_details": {
+                            "flight_key":            flight_key,
+                            "aircraft_serial":       aircraft_serial,
+                            "aircraft_registration": aircraft_identity["registration"],
+                            "flight_date":           takeoff_dt.date().isoformat(),
+                            "start_time_utc":        takeoff_dt.isoformat(),
+                            "end_time_utc":          landing_dt.isoformat(),
+                            "flight_time_min":       round(flight_time_s / 60, 1),
+                            "battery_pct_takeoff":   battery_pct_takeoff,
+                            "battery_pct_landing":   battery_pct_landing,
+                            "battery_serial":        battery_serial,
+                            "max_alt_agl_m":         round(max_alt_agl_m, 1),
+                            "max_speed_ms":          round(max_speed_ms, 1),
+                            "max_dist_m":            round(max_dist_m, 1),
+                            "total_distance_m":      total_dist_m,
+                            "home_lat":              ref_lat,
+                            "home_lon":              ref_lon,
+                            "firmware":              firmware,
+                        },
+                    })
 
                 # ------------------------------------------------------------------
                 # Step 12: persist KML (full-resolution, from parser output)

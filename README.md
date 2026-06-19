@@ -80,7 +80,7 @@ Paste this key into the **DJI API Key** field when configuring the workflow.
 | **Data Source** | — | Your EarthRanger connection configured in Desktop |
 | **DJI API Key** | — | Your DJI developer API key |
 | **Flight Logs Folder** | — | Path to the folder containing `.txt` log files |
-| **Flight Folio Event Type** | `uas_flight_folio` | Slug of the UAS Flight Folio event type in ER |
+| **Flight Folio Event Type** | `uas_flight_folio` | Slug of the UAS Flight Folio event type in ER. Leave blank for tracking-only mode (GPS tracks only, no Flight Folio events) |
 | **Aircraft Registration** | *(blank)* | Legal registration number (e.g. `ZT-001407`). Leave blank if unregistered |
 | **Subject Type** | `aircraft` | ER subject type slug for this aircraft |
 | **Subject Subtype** | `uas` | ER subject subtype slug |
@@ -181,6 +181,8 @@ The Form Builder does not have a JSON import button. If your ER administrator pr
 **Multiple aircraft** — The workflow handles mixed folders. Each aircraft gets its own ER Subject and Source, keyed on serial number.
 
 **Source provider** — The workflow automatically creates a `DJI RC Pro` source provider in ER on first run.
+
+**Tracking-only mode** — Leave the **Flight Folio Event Type** field blank to post GPS tracks only, without creating Flight Folio events. Useful for organisations that want drone tracks visible in EarthRanger without setting up the full Flight Folio event type. Idempotency still works — re-running against the same folder is safe.
 
 **Operational fields** — Section 5 (journey, pilot, observer, defects) requires manual completion in EarthRanger after ingestion. These fields cannot be auto-filled from the log.
 
