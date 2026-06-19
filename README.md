@@ -1,12 +1,11 @@
 # UAS Flight Logs → EarthRanger
 
-An [Ecoscope Desktop](https://ecoscope.io) workflow that ingests DJI flight logs (`.txt` files exported from the DJI RC Pro controller) into EarthRanger — creating GPS tracks as Subject observations and a structured **UAS Flight Folio** event per flight.
+An [Ecoscope Desktop](https://ecoscope.io) workflow that ingests DJI `.txt` flight logs into EarthRanger — creating GPS tracks as Subject observations and a structured **UAS Flight Folio** event per flight.
 
 Built for conservation organisations using DJI drones alongside EarthRanger for ranger coordination and wildlife monitoring.
 
-> **Tested on:** DJI Mavic 3T + RC Pro controller.
-> Any DJI drone that pairs with the RC Pro and exports `.txt` logs should work in principle.
-> Community testing on other drone/controller combinations is very welcome — please open an issue or post in the [EarthRanger Community Forum](https://community.earthranger.com/c/ecoscope/16) with your results.
+> **Tested on:** DJI Mavic 3T + RC Pro controller (Windows, macOS) and DJI Mavic 2 Pro + DJI Go v4 on Android (Windows).
+> Community testing on other drone and app combinations is very welcome — please open an issue or post in the [EarthRanger Community Forum](https://community.earthranger.com/c/ecoscope/16) with your results.
 
 ---
 
@@ -14,7 +13,7 @@ Built for conservation organisations using DJI drones alongside EarthRanger for 
 
 For each `.txt` log file in a folder you specify:
 
-1. Decrypts and parses the DJI RC Pro log (requires a DJI developer API key)
+1. Decrypts and parses the DJI `.txt` log (requires a DJI developer API key)
 2. Gets or creates an EarthRanger **Subject** and **Source** for the aircraft (keyed on serial number)
 3. Checks whether this flight has already been ingested — safe to re-run against the same folder
 4. Posts **GPS track observations** to EarthRanger at 1 Hz (configurable)
@@ -29,8 +28,8 @@ The dashboard shows a live satellite map of all flight tracks, an ingestion stat
 
 | Component | Requirement |
 |---|---|
-| Controller | **DJI RC Pro** — the `.txt` log format is specific to this controller. Other DJI controllers (RC-N1, Smart Controller) export `.dat` files and are not supported. |
-| Drone | Any DJI drone compatible with the RC Pro (Mavic 3 series, Mini 4 Pro, Air 3, Avata 2, etc.) |
+| Log format | **DJI `.txt`** — produced by the DJI RC Pro controller and the DJI Go / DJI Fly mobile apps. `.dat` logs from older DJI setups are not supported. |
+| Drone | Any DJI drone that produces `.txt` logs (tested: Mavic 3T, Mavic 2 Pro) |
 | Platform | Ecoscope Desktop (Windows, macOS) |
 | EarthRanger | Any hosted EarthRanger instance |
 
@@ -44,8 +43,8 @@ The dashboard shows a live satellite map of all flight tracks, an ingestion stat
   - A **Subject Subtype** (e.g. `drone_quadcopter`)
   - A **Source Type** for GPS tracks (e.g. `tracking-device`)
   - A **UAS Flight Folio** event type — see [Event Type Setup](#event-type-setup) below
-- A [DJI developer API key](https://developer.dji.com/) (required to decrypt RC Pro v13+ logs)
-- DJI RC Pro flight logs exported as `.txt` files via USB
+- A [DJI developer API key](https://developer.dji.com/) (required to decrypt DJI v13+ logs)
+- DJI `.txt` flight log files
 
 ---
 
@@ -59,7 +58,7 @@ The dashboard shows a live satellite map of all flight tracks, an ingestion stat
 
 ## Getting a DJI API Key
 
-DJI RC Pro logs (firmware v13+) are encrypted. The workflow uses your DJI developer **App Key** (also called SDK Key) to fetch the decryption keychain from DJI's servers the first time each log is processed. Subsequent runs use a locally cached keychain.
+DJI `.txt` logs (firmware v13+) are encrypted. The workflow uses your DJI developer **App Key** (also called SDK Key) to fetch the decryption keychain from DJI's servers the first time each log is processed. Subsequent runs use a locally cached keychain.
 
 1. Go to [developer.dji.com](https://developer.dji.com/) and sign in (or create a free account using your DJI username)
 2. Click **Apps** in the top navigation → **Create App**
@@ -176,11 +175,11 @@ The Form Builder does not have a JSON import button. If your ER administrator pr
 
 ## Notes
 
-**Idempotency** — Before posting each flight, the workflow checks whether a UAS Flight Folio event already exists at the same takeoff time (±10 seconds). If found, the flight is skipped. Re-running against the same folder is safe.
+**Idempotency** — Before posting each flight, the workflow checks both observations and events in ER independently. Already-ingested flights are skipped. If a Flight Folio event is deleted and the workflow is re-run, the event is re-posted without duplicating observations. Re-running against the same folder is always safe.
 
 **Multiple aircraft** — The workflow handles mixed folders. Each aircraft gets its own ER Subject and Source, keyed on serial number.
 
-**Source provider** — The workflow automatically creates a `DJI RC Pro` source provider in ER on first run.
+**Source provider** — The workflow automatically creates a `DJI` source provider in ER on first run.
 
 **Tracking-only mode** — Leave the **Flight Folio Event Type** field blank to post GPS tracks only, without creating Flight Folio events. Useful for organisations that want drone tracks visible in EarthRanger without setting up the full Flight Folio event type. Idempotency still works — re-running against the same folder is safe.
 
@@ -192,9 +191,9 @@ The Form Builder does not have a JSON import button. If your ER administrator pr
 
 ## Known Limitations
 
-- **Non-RC-Pro controllers:** `.dat` logs from older DJI controllers are not supported.
-- **Corrupt timestamps:** A small number of RC Pro logs have epoch (1970) timestamps on every frame. The workflow falls back to the filename date/time in this case — the date will be correct but the time may reflect local device time rather than UTC.
-- **Firmware version:** Populated from the DJI Fly app version in the log, not the drone's actual firmware.
+- **`.dat` logs not supported:** `.dat` format logs from older DJI setups are not supported — only `.txt`.
+- **Corrupt timestamps:** Some logs have epoch (1970) timestamps on every frame. The workflow falls back to the filename date/time in this case — the date will be correct but the time may reflect local device time rather than UTC.
+- **Firmware version:** Populated from the DJI app version recorded in the log (DJI Fly, DJI Go, etc.), not the drone's actual firmware version.
 
 ---
 
@@ -214,7 +213,7 @@ The Form Builder does not have a JSON import button. If your ER administrator pr
 
 ## Community
 
-This workflow is the first community-contributed Ecoscope Platform SDK workflow for drone operations. If you are using it with a different DJI drone or controller combination, your results are valuable — please share them on the [EarthRanger Community Forum](https://community.earthranger.com/c/ecoscope/16) or open a GitHub issue.
+This workflow is the first community-contributed Ecoscope Platform SDK workflow for drone operations. If you are using it with a different DJI drone or app combination, your results are valuable — please share them on the [EarthRanger Community Forum](https://community.earthranger.com/c/ecoscope/16) or open a GitHub issue.
 
 ---
 
