@@ -90,12 +90,12 @@
           "type": "string"
         },
         "subject_subtype": {
-          "default": "uas",
+          "default": "drone_quadcopter",
           "title": "Subject Subtype",
           "type": "string"
         },
         "source_type": {
-          "default": "djirc",
+          "default": "tracking-device",
           "title": "Source Type",
           "type": "string"
         }
