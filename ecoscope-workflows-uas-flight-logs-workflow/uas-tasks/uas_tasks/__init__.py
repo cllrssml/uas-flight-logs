@@ -593,35 +593,19 @@ def ingest_flights(
             source_id = _source_cache[aircraft_serial]
 
             # ------------------------------------------------------------------
-            # Step 9: idempotency check.
-            # Full mode: query Flight Folio events by time (±10s around takeoff).
-            # Tracking-only: query observations by source + time (±2s around
-            # takeoff). Both use ER as source of truth; no local state required.
+            # Step 9: idempotency check — query observations by source + time.
+            # Checks whether GPS observations already exist for this source in
+            # a ±2s window around takeoff. Works in both full and tracking-only
+            # mode, and remains correct even if Flight Folio events are later
+            # deleted from ER (event-based checks would re-post observations).
             # ------------------------------------------------------------------
             flight_key = f"{aircraft_serial}_{takeoff_dt.strftime('%Y%m%dT%H%M%SZ')}"
-            is_duplicate = False
-            if event_type_uuid:
-                candidates = client.get_events(
-                    event_type=[event_type_uuid],
-                    since=(takeoff_dt - timedelta(seconds=10)).isoformat(),
-                    until=(takeoff_dt + timedelta(seconds=10)).isoformat(),
-                )
-                if not candidates.empty:
-                    for _, ev in candidates.iterrows():
-                        try:
-                            ev_time = _parse_dt(str(ev.get("time") or ""))
-                            if abs((ev_time - takeoff_dt).total_seconds()) <= 10:
-                                is_duplicate = True
-                                break
-                        except Exception:
-                            continue
-            else:
-                existing_obs = client._get_observations(
-                    source_ids=source_id,
-                    since=(takeoff_dt - timedelta(seconds=2)).isoformat(),
-                    until=(takeoff_dt + timedelta(seconds=2)).isoformat(),
-                )
-                is_duplicate = not existing_obs.empty
+            existing_obs = client._get_observations(
+                source_ids=source_id,
+                since=(takeoff_dt - timedelta(seconds=2)).isoformat(),
+                until=(takeoff_dt + timedelta(seconds=2)).isoformat(),
+            )
+            is_duplicate = not existing_obs.empty
 
             if is_duplicate:
                 # Already in ER — persist KML but skip all ER writes
