@@ -414,7 +414,7 @@ def ingest_flights(
                     [binary, str(filepath),
                      "--api-key", dji_api_key,
                      "--kml", str(kml_tmp)],
-                    capture_output=True, text=True, check=True,
+                    capture_output=True, encoding="utf-8", check=True,
                     timeout=120,
                 )
                 flight_data = json.loads(result.stdout)
