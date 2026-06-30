@@ -322,16 +322,17 @@ def set_decimation_rate(
 @register()
 def set_operational_defaults(
     nature_of_flight: Annotated[
-        Literal["vlos", "bvlos"],
+        Literal["", "vlos", "r_vlos", "e_vlos", "b_vlos", "d_vlos"],
         Field(
             title="Nature of Flight",
             description=(
                 "Operational category applied to all Flight Folio events created in this run. "
-                "'vlos' = Visual Line of Sight; 'bvlos' = Beyond Visual Line of Sight."
+                "Leave blank for mixed batches — the field will be unset and can be filled "
+                "per-flight manually in EarthRanger."
             ),
-            default="vlos",
+            default="",
         ),
-    ] = "vlos",
+    ] = "",
 ) -> dict:
     """Bundle operational defaults into a dict for ingest_flights."""
     return {"nature_of_flight": nature_of_flight}

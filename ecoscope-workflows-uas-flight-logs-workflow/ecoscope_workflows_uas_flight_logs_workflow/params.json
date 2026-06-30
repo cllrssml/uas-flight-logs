@@ -123,10 +123,14 @@
       "additionalProperties": false,
       "properties": {
         "nature_of_flight": {
-          "default": "vlos",
+          "default": "",
           "enum": [
+            "",
             "vlos",
-            "bvlos"
+            "r_vlos",
+            "e_vlos",
+            "b_vlos",
+            "d_vlos"
           ],
           "title": "Nature Of Flight",
           "type": "string"
