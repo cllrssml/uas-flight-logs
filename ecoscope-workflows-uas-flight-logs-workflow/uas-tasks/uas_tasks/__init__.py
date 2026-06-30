@@ -204,9 +204,10 @@ def set_dji_api_key(
         Field(
             title="DJI API Key",
             description=(
-                "Your DJI developer API key (also called 'App Key' or 'SDK Key'). "
+                "Your DJI developer API key (also called 'ApiKey' or 'SDK Key'). "
                 "Required to decrypt DJI .txt flight logs using firmware v13+. "
-                "Find it at developer.dji.com → your apps → app detail page → 'SDK key'. "
+                "Get one free at developer.dji.com: Create App → select Open API → "
+                "activate via email → copy the ApiKey from the app detail page. "
                 "The key is used once per file to fetch the decryption keychain from DJI; "
                 "the keychain is cached, so DJI connectivity is only needed on first decrypt."
             ),

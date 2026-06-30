@@ -61,10 +61,9 @@ The dashboard shows a live satellite map of all flight tracks, an ingestion stat
 DJI `.txt` logs (firmware v13+) are encrypted. The workflow uses your DJI developer **App Key** (also called SDK Key) to fetch the decryption keychain from DJI's servers the first time each log is processed. Subsequent runs use a locally cached keychain.
 
 1. Go to [developer.dji.com](https://developer.dji.com/) and sign in (or create a free account using your DJI username)
-2. Click **Apps** in the top navigation → **Create App**
-3. Fill in any app name and description — the values do not matter for log decryption
-4. Select **Mobile SDK** as the SDK type
-5. Once created, open the app detail page and copy the **SDK Key**
+2. Click **CREATE APP**, select **Open API** as the app type, then fill in any name, category, and description — the values do not matter for log decryption
+3. Check your email for the activation link and activate the app
+4. Once activated, open the app detail page and copy the **ApiKey** (also shown as SDK Key)
 
 Paste this key into the **DJI API Key** field when configuring the workflow.
 
