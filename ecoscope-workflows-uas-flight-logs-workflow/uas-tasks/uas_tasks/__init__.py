@@ -169,6 +169,29 @@ def _write_kml(
     kml_paths.append(str(kml_path))
 
 
+def _parse_er_users(raw: Any) -> list[dict]:
+    """Normalise whatever get_users() returns into a list of dicts."""
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, dict):
+        return raw.get("results", [raw])
+    return []
+
+
+def _match_pilot_name(name: str, users: list[dict]) -> str | None:
+    """Case-insensitive match of name against ER user first_name, then username.
+    Returns the ER user UUID string if exactly one match found, else None.
+    """
+    name_lower = name.strip().lower()
+    matches = [u for u in users if (u.get("first_name") or "").lower() == name_lower]
+    if len(matches) == 1:
+        return str(matches[0]["id"])
+    matches = [u for u in users if (u.get("username") or "").lower() == name_lower]
+    if len(matches) == 1:
+        return str(matches[0]["id"])
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Form-field tasks — each exposes one config section to the Desktop form
 # ---------------------------------------------------------------------------
@@ -317,6 +340,41 @@ def set_decimation_rate(
     return rate_hz
 
 
+@register()
+def set_operational_defaults(
+    remote_pilot_name: Annotated[
+        str,
+        Field(
+            title="Remote Pilot",
+            description=(
+                "First name or username of the remote pilot who conducted these flights "
+                "(matched case-insensitively against EarthRanger user accounts). "
+                "Applied to all new Flight Folio events created in this run. "
+                "Leave blank to omit — the field can be filled manually in EarthRanger later."
+            ),
+            default="",
+        ),
+    ] = "",
+    nature_of_flight: Annotated[
+        str,
+        Field(
+            title="Nature of Flight",
+            description=(
+                "Operational category for all flights in this batch. "
+                "Typical values: 'vlos' (Visual Line of Sight) or 'bvlos' (Beyond Visual Line of Sight). "
+                "Leave blank to omit."
+            ),
+            default="vlos",
+        ),
+    ] = "vlos",
+) -> dict:
+    """Bundle operational defaults into a dict for ingest_flights."""
+    return {
+        "remote_pilot_name": remote_pilot_name.strip(),
+        "nature_of_flight": nature_of_flight.strip(),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Main ingestion task
 # ---------------------------------------------------------------------------
@@ -330,6 +388,7 @@ def ingest_flights(
     event_type_name: str,
     aircraft_identity: Any,
     decimation_rate: int,
+    operational_defaults: Any = None,
     root_path: str,
 ) -> Any:
     """
@@ -378,6 +437,25 @@ def ingest_flights(
         event_type_uuid = str(et_match.iloc[0]["id"])
     else:
         event_type_uuid = None
+
+    # Resolve operational defaults once before the per-file loop.
+    # remote_pilot_name → ER user UUID (requires a live user lookup).
+    # If blank or resolution fails, _pilot_uuid stays None and the field is omitted.
+    _pilot_uuid: str | None = None
+    _nof: str = ""
+    if isinstance(operational_defaults, dict):
+        pilot_name = operational_defaults.get("remote_pilot_name", "").strip()
+        _nof = operational_defaults.get("nature_of_flight", "").strip()
+        if pilot_name and event_type_uuid:
+            users_raw = client.get_users()
+            users = _parse_er_users(users_raw)
+            _pilot_uuid = _match_pilot_name(pilot_name, users)
+            if not _pilot_uuid:
+                raise ValueError(
+                    f"Remote pilot '{pilot_name}' did not match any EarthRanger user. "
+                    "Check the spelling — must match the user's first name or username "
+                    "exactly (case-insensitive) as it appears in ER Admin → Users."
+                )
 
     txt_files = sorted(folder.glob("*.txt"))
 
@@ -456,9 +534,11 @@ def ingest_flights(
             landing_dt = _parse_dt(frames[landing_idx]["custom"]["dateTime"])
 
             # Guard: epoch/pre-GPS-lock timestamps on the takeoff frame itself.
-            # DJI drones didn't exist before 2015; any earlier year is garbage.
+            # DJI drones didn't exist before 2015, and timestamps in the future are
+            # equally bogus (garbage GPS lock values can land in any year).
             _MIN_YEAR = 2015
-            if takeoff_dt.year < _MIN_YEAR:
+            _MAX_YEAR = datetime.now(timezone.utc).year + 1
+            if takeoff_dt.year < _MIN_YEAR or takeoff_dt.year > _MAX_YEAR:
                 # Scan forward through airborne frames for a sane timestamp.
                 for f in frames[takeoff_idx:]:
                     try:
@@ -474,7 +554,7 @@ def ingest_flights(
                 fallback = _datetime_from_filename(filepath)
                 if fallback is not None:
                     takeoff_dt = fallback
-            if landing_dt.year < _MIN_YEAR:
+            if landing_dt.year < _MIN_YEAR or landing_dt.year > _MAX_YEAR:
                 landing_dt = takeoff_dt
 
             # Flight window used to reject frames with garbage timestamps (near-zero
@@ -486,18 +566,28 @@ def ingest_flights(
             battery_pct_takeoff = int(frames[takeoff_idx]["battery"]["chargeLevel"])
             battery_pct_landing = int(frames[landing_idx]["battery"]["chargeLevel"])
 
-            # Reference point for max_dist_m and event location.
-            # Use the drone's OSD position at the takeoff frame (actual GPS, always in
-            # valid decimal degrees). Fall back to home.* only if OSD is zero, and
-            # validate that home.* is within WGS-84 range (some firmware versions store
-            # home coordinates in a non-standard unit that looks like ~45836623).
+            # Reference point for max_dist_m and event location — 3-step fallback:
+            # 1. OSD at the exact takeoff frame (best — GPS already locked at liftoff)
+            # 2. First valid OSD in any airborne frame (GPS locks a few seconds after liftoff)
+            # 3. Home-point coordinates from any frame (set before takeoff, reliable fallback)
+            # All candidates are validated to WGS-84 range to reject the firmware large-number bug.
+            def _valid_wgs84(lat: float, lon: float) -> bool:
+                return lat != 0.0 and lon != 0.0 and abs(lat) <= 90.0 and abs(lon) <= 180.0
+
             ref_lat = frames[takeoff_idx]["osd"]["latitude"]
             ref_lon = frames[takeoff_idx]["osd"]["longitude"]
-            if ref_lat == 0.0 or ref_lon == 0.0:
+            if not _valid_wgs84(ref_lat, ref_lon):
+                for f in frames[takeoff_idx:landing_idx + 1]:
+                    lat = f["osd"]["latitude"]
+                    lon = f["osd"]["longitude"]
+                    if _valid_wgs84(lat, lon):
+                        ref_lat, ref_lon = lat, lon
+                        break
+            if not _valid_wgs84(ref_lat, ref_lon):
                 for f in frames:
                     hlat = f["home"]["latitude"]
                     hlon = f["home"]["longitude"]
-                    if hlat != 0.0 and hlon != 0.0 and abs(hlat) <= 90.0 and abs(hlon) <= 180.0:
+                    if _valid_wgs84(hlat, hlon):
                         ref_lat, ref_lon = hlat, hlon
                         break
 
@@ -697,31 +787,36 @@ def ingest_flights(
                 if event_type_uuid and not has_event:
                     event_location = (
                         {"latitude": ref_lat, "longitude": ref_lon}
-                        if ref_lat != 0.0 else None
+                        if _valid_wgs84(ref_lat, ref_lon) else None
                     )
+                    event_details: dict = {
+                        "flight_key":            flight_key,
+                        "aircraft_serial":       aircraft_serial,
+                        "aircraft_registration": aircraft_identity["registration"],
+                        "flight_date":           takeoff_dt.date().isoformat(),
+                        "start_time_utc":        takeoff_dt.isoformat(),
+                        "end_time_utc":          landing_dt.isoformat(),
+                        "flight_time_min":       round(flight_time_s / 60, 1),
+                        "battery_pct_takeoff":   battery_pct_takeoff,
+                        "battery_pct_landing":   battery_pct_landing,
+                        "battery_serial":        battery_serial,
+                        "max_alt_agl_m":         round(max_alt_agl_m, 1),
+                        "max_speed_ms":          round(max_speed_ms, 1),
+                        "max_dist_m":            round(max_dist_m, 1),
+                        "total_distance_m":      total_dist_m,
+                        "home_lat":              ref_lat,
+                        "home_lon":              ref_lon,
+                        "firmware":              firmware,
+                    }
+                    if _pilot_uuid:
+                        event_details["remote_pilot"] = _pilot_uuid
+                    if _nof:
+                        event_details["nature_of_flight"] = _nof
                     client.post_event({
                         "event_type": event_type_name,
                         "time": takeoff_dt.isoformat(),
                         "location": event_location,
-                        "event_details": {
-                            "flight_key":            flight_key,
-                            "aircraft_serial":       aircraft_serial,
-                            "aircraft_registration": aircraft_identity["registration"],
-                            "flight_date":           takeoff_dt.date().isoformat(),
-                            "start_time_utc":        takeoff_dt.isoformat(),
-                            "end_time_utc":          landing_dt.isoformat(),
-                            "flight_time_min":       round(flight_time_s / 60, 1),
-                            "battery_pct_takeoff":   battery_pct_takeoff,
-                            "battery_pct_landing":   battery_pct_landing,
-                            "battery_serial":        battery_serial,
-                            "max_alt_agl_m":         round(max_alt_agl_m, 1),
-                            "max_speed_ms":          round(max_speed_ms, 1),
-                            "max_dist_m":            round(max_dist_m, 1),
-                            "total_distance_m":      total_dist_m,
-                            "home_lat":              ref_lat,
-                            "home_lon":              ref_lon,
-                            "firmware":              firmware,
-                        },
+                        "event_details": event_details,
                     })
 
                 # ------------------------------------------------------------------
