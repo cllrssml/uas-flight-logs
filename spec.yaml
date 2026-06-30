@@ -44,6 +44,11 @@ workflow:
     id: decimation_rate
     task: set_decimation_rate
 
+  # --- Operational defaults (nature of flight) --------------------------------
+  - name: Flight Defaults
+    id: operational_defaults
+    task: set_operational_defaults
+
   # --- Main ingestion loop ----------------------------------------------------
   # Iterates all .txt files in the folder. Per-file errors are recorded as
   # 'failed' rows; the rest of the batch continues regardless.
@@ -61,6 +66,7 @@ workflow:
       aircraft_identity: ${{ workflow.aircraft_identity.return }}
       decimation_rate: ${{ workflow.decimation_rate.return }}
       root_path: ${{ env.ECOSCOPE_WORKFLOWS_RESULTS }}
+      operational_defaults: ${{ workflow.operational_defaults.return }}
 
   # --- Extract track GeoDataFrame for the map --------------------------------
   - name: Track GeoDataFrame

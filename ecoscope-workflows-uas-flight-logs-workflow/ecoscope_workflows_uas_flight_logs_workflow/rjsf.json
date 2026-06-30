@@ -118,6 +118,23 @@
       "type": "object",
       "required": [],
       "title": "Track Decimation Rate"
+    },
+    "operational_defaults": {
+      "additionalProperties": false,
+      "properties": {
+        "nature_of_flight": {
+          "default": "vlos",
+          "enum": [
+            "vlos",
+            "bvlos"
+          ],
+          "title": "Nature Of Flight",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "required": [],
+      "title": "Flight Defaults"
     }
   },
   "$defs": {
@@ -157,7 +174,8 @@
       "input_folder",
       "event_type_name",
       "aircraft_identity",
-      "decimation_rate"
+      "decimation_rate",
+      "operational_defaults"
     ]
   },
   "additionalProperties": false

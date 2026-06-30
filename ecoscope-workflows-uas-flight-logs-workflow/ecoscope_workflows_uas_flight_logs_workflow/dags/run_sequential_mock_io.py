@@ -51,6 +51,7 @@ from uas_tasks import set_decimation_rate as set_decimation_rate
 from uas_tasks import set_dji_api_key as set_dji_api_key
 from uas_tasks import set_event_type_name as set_event_type_name
 from uas_tasks import set_input_folder as set_input_folder
+from uas_tasks import set_operational_defaults as set_operational_defaults
 from wt_contracts import validate as _validate
 from wt_task import task
 
@@ -133,6 +134,16 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
         .call()
     )
 
+    operational_defaults = (
+        task(set_operational_defaults)
+        .validate()
+        .set_task_instance_id("operational_defaults")
+        .handle_errors()
+        .with_tracing()
+        .partial(**(params.get("operational_defaults") or {}))
+        .call()
+    )
+
     ingest_result = (
         task(ingest_flights)
         .validate()
@@ -153,6 +164,7 @@ def main(params: dict[str, Any], validate_params_schema: bool = True):
             aircraft_identity=aircraft_identity,
             decimation_rate=decimation_rate,
             root_path=os.environ["ECOSCOPE_WORKFLOWS_RESULTS"],
+            operational_defaults=operational_defaults,
             **(params.get("ingest_result") or {}),
         )
         .call()

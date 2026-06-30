@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from math import atan2, cos, radians, sin, sqrt
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 
 import geopandas as gpd
@@ -168,28 +168,6 @@ def _write_kml(
     kml_path.write_text(kml_text, encoding="utf-8")
     kml_paths.append(str(kml_path))
 
-
-def _parse_er_users(raw: Any) -> list[dict]:
-    """Normalise whatever get_users() returns into a list of dicts."""
-    if isinstance(raw, list):
-        return raw
-    if isinstance(raw, dict):
-        return raw.get("results", [raw])
-    return []
-
-
-def _match_pilot_name(name: str, users: list[dict]) -> str | None:
-    """Case-insensitive match of name against ER user first_name, then username.
-    Returns the ER user UUID string if exactly one match found, else None.
-    """
-    name_lower = name.strip().lower()
-    matches = [u for u in users if (u.get("first_name") or "").lower() == name_lower]
-    if len(matches) == 1:
-        return str(matches[0]["id"])
-    matches = [u for u in users if (u.get("username") or "").lower() == name_lower]
-    if len(matches) == 1:
-        return str(matches[0]["id"])
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -343,37 +321,20 @@ def set_decimation_rate(
 
 @register()
 def set_operational_defaults(
-    remote_pilot_name: Annotated[
-        str,
-        Field(
-            title="Remote Pilot",
-            description=(
-                "First name or username of the remote pilot who conducted these flights "
-                "(matched case-insensitively against EarthRanger user accounts). "
-                "Applied to all new Flight Folio events created in this run. "
-                "Leave blank to omit — the field can be filled manually in EarthRanger later."
-            ),
-            default="",
-        ),
-    ] = "",
     nature_of_flight: Annotated[
-        str,
+        Literal["vlos", "bvlos"],
         Field(
             title="Nature of Flight",
             description=(
-                "Operational category for all flights in this batch. "
-                "Typical values: 'vlos' (Visual Line of Sight) or 'bvlos' (Beyond Visual Line of Sight). "
-                "Leave blank to omit."
+                "Operational category applied to all Flight Folio events created in this run. "
+                "'vlos' = Visual Line of Sight; 'bvlos' = Beyond Visual Line of Sight."
             ),
             default="vlos",
         ),
     ] = "vlos",
 ) -> dict:
     """Bundle operational defaults into a dict for ingest_flights."""
-    return {
-        "remote_pilot_name": remote_pilot_name.strip(),
-        "nature_of_flight": nature_of_flight.strip(),
-    }
+    return {"nature_of_flight": nature_of_flight}
 
 
 # ---------------------------------------------------------------------------
@@ -389,8 +350,8 @@ def ingest_flights(
     event_type_name: str,
     aircraft_identity: Any,
     decimation_rate: int,
-    operational_defaults: Any = None,
     root_path: str,
+    operational_defaults: Any = None,
 ) -> Any:
     """
     Iterate DJI .txt flight records in input_folder, decrypt each, post track
@@ -439,24 +400,9 @@ def ingest_flights(
     else:
         event_type_uuid = None
 
-    # Resolve operational defaults once before the per-file loop.
-    # remote_pilot_name → ER user UUID (requires a live user lookup).
-    # If blank or resolution fails, _pilot_uuid stays None and the field is omitted.
-    _pilot_uuid: str | None = None
     _nof: str = ""
     if isinstance(operational_defaults, dict):
-        pilot_name = operational_defaults.get("remote_pilot_name", "").strip()
         _nof = operational_defaults.get("nature_of_flight", "").strip()
-        if pilot_name and event_type_uuid:
-            users_raw = client.get_users()
-            users = _parse_er_users(users_raw)
-            _pilot_uuid = _match_pilot_name(pilot_name, users)
-            if not _pilot_uuid:
-                raise ValueError(
-                    f"Remote pilot '{pilot_name}' did not match any EarthRanger user. "
-                    "Check the spelling — must match the user's first name or username "
-                    "exactly (case-insensitive) as it appears in ER Admin → Users."
-                )
 
     txt_files = sorted(folder.glob("*.txt"))
 
@@ -809,8 +755,6 @@ def ingest_flights(
                         "home_lon":              ref_lon,
                         "firmware":              firmware,
                     }
-                    if _pilot_uuid:
-                        event_details["remote_pilot"] = _pilot_uuid
                     if _nof:
                         event_details["nature_of_flight"] = _nof
                     client.post_event({
