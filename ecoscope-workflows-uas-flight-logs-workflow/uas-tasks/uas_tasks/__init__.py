@@ -265,7 +265,7 @@ def set_aircraft_identity(
         Field(
             title="Aircraft Registration",
             description=(
-                "Legal registration number as it appears on the airframe (e.g. ZT-001407). "
+                "Legal registration number as it appears on the airframe (e.g. ZT-000001). "
                 "Stored on the EarthRanger Subject as additional metadata. "
                 "Leave blank if the aircraft is not registered."
             ),

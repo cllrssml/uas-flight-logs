@@ -18,8 +18,8 @@ Usage (run from inside the compiled workflow dir):
     cd ecoscope-workflows-uas-flight-logs-workflow
     export ER_PASSWORD="..."
     pixi run python ../patch_locations.py \\
-        --er-server https://careforwildrhino.pamdas.org \\
-        --er-user SamC \\
+        --er-server https://<your-er-instance>.pamdas.org \\
+        --er-user <your-er-username> \\
         --api-key <DJI_API_KEY> \\
         --logs-folder "C:\\\\Users\\\\apute\\\\Documents\\\\DJILogs" \\
         --csv "/mnt/c/Users/apute/Downloads/DJItoERLogsPrep - first_csv_by_cc.csv" \\

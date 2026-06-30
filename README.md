@@ -79,7 +79,7 @@ Paste this key into the **DJI API Key** field when configuring the workflow.
 | **DJI API Key** | — | Your DJI developer API key |
 | **Flight Logs Folder** | — | Path to the folder containing `.txt` log files |
 | **Flight Folio Event Type** | `uas_flight_folio` | Slug of the UAS Flight Folio event type in ER. Leave blank for tracking-only mode (GPS tracks only, no Flight Folio events) |
-| **Aircraft Registration** | *(blank)* | Legal registration number (e.g. `ZT-001407`). Leave blank if unregistered |
+| **Aircraft Registration** | *(blank)* | Legal registration number as it appears on the airframe (e.g. `ZT-000001`). Leave blank if unregistered |
 | **Subject Type** | `aircraft` | ER subject type slug for this aircraft |
 | **Subject Subtype** | `drone_quadcopter` | ER subject subtype slug |
 | **Source Type** | `tracking-device` | ER source type slug for GPS tracks |
