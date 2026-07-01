@@ -175,7 +175,13 @@ def _write_kml(
 # ---------------------------------------------------------------------------
 
 
-@register()
+@register(
+    description=(
+        "Your DJI developer key, used to decrypt .txt flight log files. "
+        "Get one free at developer.dji.com — create an app (select Open API), "
+        "activate via email, then copy the ApiKey from the app detail page."
+    )
+)
 def set_dji_api_key(
     dji_api_key: Annotated[
         str,
@@ -195,7 +201,13 @@ def set_dji_api_key(
     return dji_api_key
 
 
-@register()
+@register(
+    description=(
+        "Full path to the folder containing your exported .txt flight log files. "
+        "Connect the RC Pro via USB, copy the logs folder to your computer, "
+        "then paste the path here."
+    )
+)
 def set_input_folder(
     folder_path: Annotated[
         str,
@@ -215,7 +227,13 @@ def set_input_folder(
     return folder_path
 
 
-@register()
+@register(
+    description=(
+        "The slug of the UAS Flight Folio event type in your EarthRanger instance. "
+        "Leave blank to run in tracking-only mode — GPS tracks will be posted "
+        "but no Flight Folio events will be created."
+    )
+)
 def set_event_type_name(
     event_type_name: Annotated[
         str,
@@ -236,7 +254,13 @@ def set_event_type_name(
     return event_type_name
 
 
-@register()
+@register(
+    description=(
+        "Identifies the drone as a Subject in EarthRanger using its serial number. "
+        "The Subject and Source are created automatically if they don't exist — "
+        "these fields define their type and subtype."
+    )
+)
 def set_aircraft_identity(
     registration: Annotated[
         str,
@@ -296,7 +320,13 @@ def set_aircraft_identity(
     }
 
 
-@register()
+@register(
+    description=(
+        "How many GPS fixes per second to post to EarthRanger. "
+        "DJI logs at ~10 Hz; the default 1 Hz gives smooth tracks with a 10× data reduction. "
+        "Performance stats always use full-resolution data."
+    )
+)
 def set_decimation_rate(
     rate_hz: Annotated[
         int,
@@ -319,7 +349,13 @@ def set_decimation_rate(
     return rate_hz
 
 
-@register()
+@register(
+    description=(
+        "Operational settings applied to every flight in this batch. "
+        "Leave Nature of Flight blank for mixed batches — "
+        "it can be filled per-flight manually in EarthRanger."
+    )
+)
 def set_operational_defaults(
     nature_of_flight: Annotated[
         Literal["", "vlos", "r_vlos", "e_vlos", "b_vlos", "d_vlos"],

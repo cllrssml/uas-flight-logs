@@ -47,6 +47,7 @@
         "dji_api_key"
       ],
       "type": "object",
+      "description": "Your DJI developer key, used to decrypt .txt flight log files. Get one free at developer.dji.com \u2014 create an app (select Open API), activate via email, then copy the ApiKey from the app detail page.",
       "title": "DJI API Key"
     },
     "input_folder": {
@@ -61,6 +62,7 @@
         "folder_path"
       ],
       "type": "object",
+      "description": "Full path to the folder containing your exported .txt flight log files. Connect the RC Pro via USB, copy the logs folder to your computer, then paste the path here.",
       "title": "Flight Logs Folder"
     },
     "event_type_name": {
@@ -73,6 +75,7 @@
         }
       },
       "type": "object",
+      "description": "The slug of the UAS Flight Folio event type in your EarthRanger instance. Leave blank to run in tracking-only mode \u2014 GPS tracks will be posted but no Flight Folio events will be created.",
       "required": [],
       "title": "Flight Folio Event Type"
     },
@@ -101,6 +104,7 @@
         }
       },
       "type": "object",
+      "description": "Identifies the drone as a Subject in EarthRanger using its serial number. The Subject and Source are created automatically if they don't exist \u2014 these fields define their type and subtype.",
       "required": [],
       "title": "Aircraft Identity"
     },
@@ -116,6 +120,7 @@
         }
       },
       "type": "object",
+      "description": "How many GPS fixes per second to post to EarthRanger. DJI logs at ~10 Hz; the default 1 Hz gives smooth tracks with a 10\u00d7 data reduction. Performance stats always use full-resolution data.",
       "required": [],
       "title": "Track Decimation Rate"
     },
@@ -137,6 +142,7 @@
         }
       },
       "type": "object",
+      "description": "Operational settings applied to every flight in this batch. Leave Nature of Flight blank for mixed batches \u2014 it can be filled per-flight manually in EarthRanger.",
       "required": [],
       "title": "Flight Defaults"
     }
